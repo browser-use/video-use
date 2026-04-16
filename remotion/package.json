@@ -1,0 +1,21 @@
+{
+  "name": "video-use-preview",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remotion Studio preview for video-use EDL compositions",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "setup": "node setup-public.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.293",
+    "@remotion/player": "4.0.293",
+    "react": "^19",
+    "react-dom": "^19",
+    "remotion": "4.0.293"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

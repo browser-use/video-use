@@ -36,6 +36,10 @@ node_modules/
 package-lock.json
 yarn.lock
 .npm/
+remotion/public/*.mp4
+remotion/public/*.mov
+remotion/public/*.mkv
+remotion/public/*.avi
 
 # Manim render artifacts (when running skills/manim-video scripts locally)
 media/

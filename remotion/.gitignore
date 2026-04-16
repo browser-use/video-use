@@ -1,0 +1,5 @@
+node_modules/
+public/*.mp4
+public/*.mov
+public/*.mkv
+public/*.avi

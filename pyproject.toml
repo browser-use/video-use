@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+whisperx = ["whisperx"]
 animations = ["manim"]
 
 [build-system]

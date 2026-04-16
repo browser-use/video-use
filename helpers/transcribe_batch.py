@@ -1,13 +1,16 @@
-"""Batch-transcribe every video in a directory with 4 parallel workers.
+"""Batch-transcribe every video in a directory.
 
-Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
-each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
+Supports both WhisperX (local) and ElevenLabs Scribe (cloud) backends.
+  - ElevenLabs: 4-worker parallel API calls (default if ELEVENLABS_API_KEY set).
+  - WhisperX: model loaded once, files processed sequentially (GPU memory shared).
 
 Cached per-file: any source that already has a transcript is skipped.
 
 Usage:
     python helpers/transcribe_batch.py <videos_dir>
-    python helpers/transcribe_batch.py <videos_dir> --workers 4
+    python helpers/transcribe_batch.py <videos_dir> --backend whisperx
+    python helpers/transcribe_batch.py <videos_dir> --backend whisperx --model base
+    python helpers/transcribe_batch.py <videos_dir> --backend elevenlabs --workers 4
     python helpers/transcribe_batch.py <videos_dir> --num-speakers 2
     python helpers/transcribe_batch.py <videos_dir> --edit-dir /custom/edit
 """
@@ -20,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one
+from transcribe import detect_backend, load_whisperx_model, transcribe_one, _load_env_var
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -35,26 +38,31 @@ def find_videos(videos_dir: Path) -> list[Path]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Parallel batch transcription of a videos directory")
+    ap = argparse.ArgumentParser(description="Batch transcription of a videos directory")
     ap.add_argument("videos_dir", type=Path, help="Directory containing source videos")
     ap.add_argument(
-        "--edit-dir",
-        type=Path,
-        default=None,
+        "--edit-dir", type=Path, default=None,
         help="Edit output directory (default: <videos_dir>/edit)",
     )
-    ap.add_argument("--workers", type=int, default=4, help="Parallel workers (default: 4)")
     ap.add_argument(
-        "--language",
-        type=str,
-        default=None,
+        "--workers", type=int, default=4,
+        help="Parallel workers for ElevenLabs backend (default: 4). Ignored for whisperx.",
+    )
+    ap.add_argument(
+        "--language", type=str, default=None,
         help="Optional ISO language code. Omit to auto-detect per file.",
     )
     ap.add_argument(
-        "--num-speakers",
-        type=int,
-        default=None,
+        "--num-speakers", type=int, default=None,
         help="Optional number of speakers. Improves diarization when known.",
+    )
+    ap.add_argument(
+        "--backend", type=str, default=None, choices=["whisperx", "elevenlabs"],
+        help="Transcription backend (default: elevenlabs if API key set, else whisperx).",
+    )
+    ap.add_argument(
+        "--model", type=str, default=None,
+        help="WhisperX model name (default: large-v3 on GPU, small on CPU).",
     )
     args = ap.parse_args()
 
@@ -72,34 +80,59 @@ def main() -> None:
     already_cached = [v for v in videos if (edit_dir / "transcripts" / f"{v.stem}.json").exists()]
     pending = [v for v in videos if v not in already_cached]
 
+    backend = args.backend or detect_backend()
     print(f"found {len(videos)} videos ({len(already_cached)} cached, {len(pending)} to transcribe)")
+    print(f"backend: {backend}")
     if not pending:
         print("nothing to do")
         return
 
-    api_key = load_api_key()
-
-    print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()
-
     errors: list[tuple[Path, str]] = []
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {
-            pool.submit(
-                transcribe_one,
-                video=v,
-                edit_dir=edit_dir,
-                api_key=api_key,
-                language=args.language,
-                num_speakers=args.num_speakers,
-                verbose=False,
-            ): v
-            for v in pending
-        }
-        for fut in as_completed(futures):
-            v = futures[fut]
+
+    if backend == "elevenlabs":
+        api_key = _load_env_var("ELEVENLABS_API_KEY")
+        if not api_key:
+            sys.exit("ELEVENLABS_API_KEY not found in .env or environment")
+
+        print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {
+                pool.submit(
+                    transcribe_one,
+                    video=v,
+                    edit_dir=edit_dir,
+                    backend="elevenlabs",
+                    api_key=api_key,
+                    language=args.language,
+                    num_speakers=args.num_speakers,
+                    verbose=False,
+                ): v
+                for v in pending
+            }
+            for fut in as_completed(futures):
+                v = futures[fut]
+                try:
+                    out = fut.result()
+                    print(f"  + {v.stem}  →  {out.name}")
+                except Exception as e:
+                    errors.append((v, str(e)))
+                    print(f"  x {v.stem}  FAILED: {e}")
+    else:
+        print("loading WhisperX model…")
+        model = load_whisperx_model(model_name=args.model)
+
+        print(f"transcribing {len(pending)} files sequentially")
+        for v in pending:
             try:
-                out = fut.result()
+                out = transcribe_one(
+                    video=v,
+                    edit_dir=edit_dir,
+                    backend="whisperx",
+                    whisperx_model=model,
+                    language=args.language,
+                    num_speakers=args.num_speakers,
+                )
                 print(f"  + {v.stem}  →  {out.name}")
             except Exception as e:
                 errors.append((v, str(e)))

@@ -57,7 +57,9 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 
 ## Setup
 
-- `ELEVENLABS_API_KEY` in `.env` at project root or env. Ask and write `.env` if missing.
+- Transcription backend (auto-detected):
+  - **ElevenLabs Scribe** (cloud): set `ELEVENLABS_API_KEY` in `.env`. Fast, includes audio event tags.
+  - **WhisperX** (local): `pip install -e ".[whisperx]"`. No API key needed. Optional `HF_TOKEN` for speaker diarization.
 - `ffmpeg` + `ffprobe` on PATH.
 - Python deps: `pip install -e .`.
 - `yt-dlp`, `manim`, Remotion installed only on first use.
@@ -65,12 +67,14 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 
 ## Helpers
 
-- **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
-- **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
+- **`transcribe.py <video>`** — transcription (auto-selects backend). `--backend whisperx|elevenlabs`, `--model base|small|large-v3` (WhisperX), `--num-speakers N`. Cached.
+- **`transcribe_batch.py <videos_dir>`** — batch transcription. ElevenLabs: 4-worker parallel. WhisperX: sequential (model loaded once).
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
 - **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
+
+- **`remotion/`** — Remotion Studio preview. After producing `edl.json`, run `cd remotion && npm run setup && npm run studio` for instant browser-based preview with timeline scrubbing. No render wait.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
 

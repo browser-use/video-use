@@ -1,9 +1,9 @@
-"""Pack all Scribe transcripts in <edit>/transcripts/ into one readable markdown.
+"""Pack all transcripts in <edit>/transcripts/ into one readable markdown.
 
 Groups word-level entries into phrase-level lines, breaking on any silence
 >= 0.5s OR speaker change. Each phrase gets a [start-end] prefix. This is
 the PRIMARY artifact the editor sub-agent reads to pick cuts — it fits one
-hour of takes in a tenth the tokens of raw Scribe JSON and gives
+hour of takes in a tenth the tokens of raw transcript JSON and gives
 word-boundary precision from text alone.
 
 Output: <edit>/takes_packed.md

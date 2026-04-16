@@ -31,10 +31,18 @@ pip install -e .
 brew install ffmpeg           # required
 brew install yt-dlp            # optional, for downloading online sources
 
-# 3. Add your ElevenLabs API key
+# 3. Transcription backend (pick one)
+#    Option A — ElevenLabs Scribe (cloud, fast, includes audio event tags):
 cp .env.example .env
 $EDITOR .env                   # ELEVENLABS_API_KEY=...
+#    Option B — WhisperX (local, no API key needed):
+pip install -e ".[whisperx]"
+
+# 4. (Optional) Remotion Studio for instant preview — no render wait
+cd remotion && npm install && cd ..
 ```
+
+> **Backend auto-detection:** if `ELEVENLABS_API_KEY` is set, ElevenLabs is used. Otherwise WhisperX runs locally. Override with `--backend whisperx` or `--backend elevenlabs`.
 
 Then point Claude Code at a folder of raw takes:
 
@@ -57,7 +65,7 @@ The LLM never watches the video. It **reads** it — through two layers that tog
   <img src="static/timeline-view.svg" alt="timeline_view composite — filmstrip + speaker track + waveform + word labels + silence-gap cut candidates" width="100%">
 </p>
 
-**Layer 1 — Audio transcript (always loaded).** One ElevenLabs Scribe call per source gives word-level timestamps, speaker diarization, and audio events (`(laughter)`, `(applause)`, `(sigh)`). All takes pack into a single ~12KB `takes_packed.md` — the LLM's primary reading view.
+**Layer 1 — Audio transcript (always loaded).** One transcription pass per source (ElevenLabs Scribe cloud or WhisperX local) gives word-level timestamps, speaker diarization, and optionally audio events. All takes pack into a single ~12KB `takes_packed.md` — the LLM's primary reading view.
 
 ```
 ## C0103  (duration: 43.0s, 8 phrases)
@@ -75,12 +83,26 @@ Same idea as browser-use giving an LLM a structured DOM instead of a screenshot 
 ## Pipeline
 
 ```
-Transcribe ──> Pack ──> LLM Reasons ──> EDL ──> Render ──> Self-Eval
-                                                              │
-                                                              └─ issue? fix + re-render (max 3)
+Transcribe ──> Pack ──> LLM Reasons ──> EDL ──┬──> Remotion Studio (instant preview)
+                                               │
+                                               └──> Render ──> Self-Eval
+                                                                  │
+                                                                  └─ issue? fix + re-render (max 3)
 ```
 
 The self-eval loop runs `timeline_view` on the _rendered output_ at every cut boundary — catches visual jumps, audio pops, hidden subtitles. You see the preview only after it passes.
+
+## Remotion Studio preview
+
+Skip the render wait — preview your edit instantly in the browser:
+
+```bash
+cd remotion
+npm run setup       # copies source videos into public/
+npm run studio      # opens http://localhost:3000
+```
+
+Remotion Studio reads `edit/edl.json` and sequences the clips with live subtitles. Scrub anywhere, adjust timing in the EDL, and the studio hot-reloads. Only do the full ffmpeg render once you're happy with the cut.
 
 ## Design principles
 
