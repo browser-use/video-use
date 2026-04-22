@@ -13,7 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 animations = ["manim"]
-copilot = ["openai>=1.0"]
+copilot = ["github-copilot-sdk", "pydantic>=2.0"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -52,23 +52,27 @@ claude
 ### Option B — GitHub Copilot (no Anthropic key required)
 
 Uses your existing GitHub Copilot subscription as the LLM backend via the
-OpenAI-compatible Copilot API. Same pipeline, same production rules, same helpers.
+[GitHub Copilot SDK](https://github.com/github/copilot-sdk). The SDK bundles the
+Copilot CLI automatically — no separate CLI install needed. Same pipeline, same
+production rules, same helpers.
 
 ```bash
 # 1. Clone the repo
 git clone https://github.com/browser-use/video-use
 cd video-use
 
-# 2. Install deps (includes the openai SDK)
+# 2. Install deps (includes the Copilot SDK)
 pip install -e ".[copilot]"
 brew install ffmpeg           # required
 brew install yt-dlp            # optional
 
-# 3. Configure API keys
+# 3. Authenticate — pick one:
+copilot auth login             # Option A: browser login (recommended, no token needed)
+#  — OR —
 cp .env.example .env
 $EDITOR .env
 #   ELEVENLABS_API_KEY=...    ← for transcription (same as before)
-#   GITHUB_TOKEN=...          ← PAT with 'copilot' scope
+#   GITHUB_TOKEN=...          ← PAT with 'copilot' scope (option B)
 #                               https://github.com/settings/tokens
 ```
 
@@ -81,14 +85,18 @@ python /path/to/video-use/orchestrator.py /path/to/your/videos
 Available options:
 
 ```
---model claude-opus-4-7  # default — Anthropic Claude Opus 4.7 (strong reasoning + vision)
---model gpt-4o           # OpenAI GPT-4o alternative
---model claude-sonnet-4-5 # faster Anthropic option
---model gpt-4o-mini      # fastest/lightest option
---endpoint <url>         # default: https://api.githubcopilot.com
-                         # GitHub Models alternative: https://models.inference.ai.azure.com
---max-turns 100          # safety cap on LLM turns (default: 100)
+# Model (omit to let Copilot auto-select — recommended)
+--model claude-opus-4.5   # Anthropic Claude Opus 4.5 — complex tasks, deep reasoning
+--model claude-sonnet-4.5 # Anthropic Claude Sonnet 4.5 — faster, most routine tasks
+--model gpt-5             # OpenAI GPT-5
+--model gpt-4.1           # OpenAI GPT-4.1
+
+# Other flags
+--enable-shell            # enable built-in shell tool (off by default for safety)
+--max-turns 200           # safety cap on interactive turns (default: 200)
 ```
+
+You can also switch models mid-session with `/model` at the prompt.
 
 And in the session:
 
