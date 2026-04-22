@@ -691,10 +691,11 @@ def main() -> None:
             "  GITHUB_TOKEN       Personal Access Token with 'copilot' scope (required)\n"
             "  ELEVENLABS_API_KEY ElevenLabs API key for transcription (required for transcribe tools)\n"
             "\nModel options (via GitHub Copilot):\n"
-            "  gpt-4o             Default — strong reasoning, vision support\n"
-            "  gpt-4o-mini        Faster and lighter\n"
-            "  claude-3.5-sonnet  Anthropic model via Copilot\n"
-            "  o3-mini            Reasoning model\n"
+            "  claude-opus-4-7    Default — Anthropic Claude Opus 4.7, strong reasoning + vision\n"
+            "  claude-sonnet-4-5  Anthropic Claude Sonnet 4.5 — faster, lighter\n"
+            "  gpt-4o             OpenAI GPT-4o — strong reasoning, vision support\n"
+            "  gpt-4o-mini        OpenAI GPT-4o mini — fastest OpenAI option\n"
+            "  o3-mini            OpenAI o3-mini — reasoning model\n"
             "\nAlternative endpoint (GitHub Models free tier):\n"
             "  --endpoint https://models.inference.ai.azure.com\n"
         ),
@@ -706,8 +707,8 @@ def main() -> None:
     )
     ap.add_argument(
         "--model",
-        default="gpt-4o",
-        help="Model identifier for the Copilot API (default: gpt-4o).",
+        default="claude-opus-4-7",
+        help="Model identifier for the Copilot API (default: claude-opus-4-7).",
     )
     ap.add_argument(
         "--endpoint",

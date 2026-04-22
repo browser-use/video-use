@@ -81,10 +81,13 @@ python /path/to/video-use/orchestrator.py /path/to/your/videos
 Available options:
 
 ```
---model gpt-4o          # default; also: gpt-4o-mini, claude-3.5-sonnet, o3-mini
---endpoint <url>        # default: https://api.githubcopilot.com
-                        # GitHub Models alternative: https://models.inference.ai.azure.com
---max-turns 100         # safety cap on LLM turns (default: 100)
+--model claude-opus-4-7  # default — Anthropic Claude Opus 4.7 (strong reasoning + vision)
+--model gpt-4o           # OpenAI GPT-4o alternative
+--model claude-sonnet-4-5 # faster Anthropic option
+--model gpt-4o-mini      # fastest/lightest option
+--endpoint <url>         # default: https://api.githubcopilot.com
+                         # GitHub Models alternative: https://models.inference.ai.azure.com
+--max-turns 100          # safety cap on LLM turns (default: 100)
 ```
 
 And in the session:
