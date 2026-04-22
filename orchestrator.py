@@ -33,6 +33,15 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+try:
+    from copilot import CopilotClient, SubprocessConfig, define_tool
+    from copilot.session import PermissionRequestResult
+    from pydantic import BaseModel, Field
+except ImportError:  # deferred error — shown at runtime with a friendly message
+    CopilotClient = SubprocessConfig = define_tool = PermissionRequestResult = None  # type: ignore
+    BaseModel = object  # type: ignore
+    Field = lambda **_: None  # type: ignore
+
 # ---------------------------------------------------------------------------
 # Repo-relative paths
 # ---------------------------------------------------------------------------
@@ -163,6 +172,50 @@ def _prepare_image_attachment(img_path: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Tool parameter models (module-level so get_type_hints() can resolve them)
+# ---------------------------------------------------------------------------
+
+
+class TranscribeParams(BaseModel):
+    video_path: str = Field(description="Absolute path to the video file.")
+    language: Optional[str] = Field(default=None, description="ISO language code (e.g. 'en'). Omit to auto-detect.")
+    num_speakers: Optional[int] = Field(default=None, description="Number of speakers for diarization.")
+
+
+class TranscribeBatchParams(BaseModel):
+    workers: Optional[int] = Field(default=None, description="Parallel workers (default 4).")
+    num_speakers: Optional[int] = Field(default=None, description="Number of speakers (optional).")
+
+
+class PackTranscriptsParams(BaseModel):
+    silence_threshold: Optional[float] = Field(default=None, description="Silence gap in seconds that triggers a phrase break (default 0.5).")
+
+
+class TimelineViewParams(BaseModel):
+    video_path: str = Field(description="Absolute path to the video file.")
+    start: float = Field(description="Start time in seconds.")
+    end: float = Field(description="End time in seconds.")
+    n_frames: Optional[int] = Field(default=None, description="Number of filmstrip frames to extract (default 8).")
+    transcript_path: Optional[str] = Field(default=None, description="Optional path to transcript JSON for word label overlay.")
+
+
+class RenderParams(BaseModel):
+    edl_path: str = Field(description="Absolute path to edl.json.")
+    output_path: str = Field(description="Output video path (e.g. edit/final.mp4).")
+    preview: Optional[bool] = Field(default=None, description="Preview mode: 1080p, CRF 22, faster encode.")
+    build_subtitles: Optional[bool] = Field(default=None, description="Build master.srt from transcripts + EDL timeline offsets.")
+    no_subtitles: Optional[bool] = Field(default=None, description="Skip subtitles even if the EDL references one.")
+    no_loudnorm: Optional[bool] = Field(default=None, description="Skip audio loudness normalization.")
+
+
+class GradeParams(BaseModel):
+    input_path: str = Field(description="Input video path.")
+    output_path: str = Field(description="Output video path.")
+    preset: Optional[str] = Field(default=None, description="Grade preset: subtle, neutral_punch, warm_cinematic, none.")
+    filter: Optional[str] = Field(default=None, description="Raw ffmpeg filter string (overrides preset).")
+
+
+# ---------------------------------------------------------------------------
 # Session loop
 # ---------------------------------------------------------------------------
 
@@ -173,11 +226,7 @@ async def run_session(
     enable_shell: bool,
     max_turns: int,
 ) -> None:
-    try:
-        from copilot import CopilotClient, SubprocessConfig, define_tool
-        from copilot.session import PermissionRequestResult
-        from pydantic import BaseModel, Field
-    except ImportError:
+    if CopilotClient is None:
         sys.exit(
             "Required packages not found.\n"
             "Install with:  pip install -e \".[copilot]\"\n"
@@ -188,43 +237,6 @@ async def run_session(
 
     edit_dir = videos_dir / "edit"
     edit_dir.mkdir(parents=True, exist_ok=True)
-
-    # ------------------------------------------------------------------
-    # Tool parameter models
-    # ------------------------------------------------------------------
-
-    class TranscribeParams(BaseModel):
-        video_path: str = Field(description="Absolute path to the video file.")
-        language: Optional[str] = Field(default=None, description="ISO language code (e.g. 'en'). Omit to auto-detect.")
-        num_speakers: Optional[int] = Field(default=None, description="Number of speakers for diarization.")
-
-    class TranscribeBatchParams(BaseModel):
-        workers: Optional[int] = Field(default=None, description="Parallel workers (default 4).")
-        num_speakers: Optional[int] = Field(default=None, description="Number of speakers (optional).")
-
-    class PackTranscriptsParams(BaseModel):
-        silence_threshold: Optional[float] = Field(default=None, description="Silence gap in seconds that triggers a phrase break (default 0.5).")
-
-    class TimelineViewParams(BaseModel):
-        video_path: str = Field(description="Absolute path to the video file.")
-        start: float = Field(description="Start time in seconds.")
-        end: float = Field(description="End time in seconds.")
-        n_frames: Optional[int] = Field(default=None, description="Number of filmstrip frames to extract (default 8).")
-        transcript_path: Optional[str] = Field(default=None, description="Optional path to transcript JSON for word label overlay.")
-
-    class RenderParams(BaseModel):
-        edl_path: str = Field(description="Absolute path to edl.json.")
-        output_path: str = Field(description="Output video path (e.g. edit/final.mp4).")
-        preview: Optional[bool] = Field(default=None, description="Preview mode: 1080p, CRF 22, faster encode.")
-        build_subtitles: Optional[bool] = Field(default=None, description="Build master.srt from transcripts + EDL timeline offsets.")
-        no_subtitles: Optional[bool] = Field(default=None, description="Skip subtitles even if the EDL references one.")
-        no_loudnorm: Optional[bool] = Field(default=None, description="Skip audio loudness normalization.")
-
-    class GradeParams(BaseModel):
-        input_path: str = Field(description="Input video path.")
-        output_path: str = Field(description="Output video path.")
-        preset: Optional[str] = Field(default=None, description="Grade preset: subtle, neutral_punch, warm_cinematic, none.")
-        filter: Optional[str] = Field(default=None, description="Raw ffmpeg filter string (overrides preset).")
 
     # ------------------------------------------------------------------
     # Tool implementations
