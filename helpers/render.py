@@ -84,6 +84,45 @@ def resolve_path(maybe_path: str, base: Path) -> Path:
     return (base / p).resolve()
 
 
+# -------- HDR → SDR tone mapping (HLG / PQ sources) --------------------------
+#
+# iPhone defaults to HLG HDR in Rec.2020 (and many mirrorless cameras ship PQ).
+# If the source is HDR and we only downconvert bit depth (yuv420p10le → yuv420p)
+# without tone-mapping, the output is 8-bit but still carries HLG/PQ transfer
+# metadata. Players that honor the metadata (screen recorders, most social
+# upload re-encodes) interpret 8-bit values in an HDR container and the result
+# looks oversaturated / blown out. QuickTime on macOS can hide this locally —
+# screen recording and uploaded renders cannot.
+#
+# Fix: detect HDR via color_transfer and prepend a zscale+tonemap chain to the
+# vf graph so the output is clean Rec.709 SDR.
+
+HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}  # PQ (HDR10) and HLG
+
+TONEMAP_CHAIN = (
+    "zscale=t=linear:npl=100,"
+    "format=gbrpf32le,"
+    "zscale=p=bt709,"
+    "tonemap=tonemap=hable:desat=0,"
+    "zscale=t=bt709:m=bt709:r=tv,"
+    "format=yuv420p"
+)
+
+
+def is_hdr_source(video: Path) -> bool:
+    """Return True if the source uses a PQ or HLG transfer function."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=color_transfer",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            capture_output=True, text=True, check=True,
+        )
+        return out.stdout.strip() in HDR_TRANSFERS
+    except subprocess.CalledProcessError:
+        return False
+
+
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
 
 
@@ -112,7 +151,10 @@ def extract_segment(
     else:
         scale = "scale=1920:-2"
 
-    vf_parts = [scale]
+    vf_parts: list[str] = []
+    if is_hdr_source(source):
+        vf_parts.append(TONEMAP_CHAIN)
+    vf_parts.append(scale)
     if grade_filter:
         vf_parts.append(grade_filter)
     vf = ",".join(vf_parts)
