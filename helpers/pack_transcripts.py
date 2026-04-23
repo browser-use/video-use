@@ -192,7 +192,7 @@ def main() -> None:
     markdown = render_markdown(entries, args.silence_threshold)
 
     out_path = args.output or (edit_dir / "takes_packed.md")
-    out_path.write_text(markdown)
+    out_path.write_text(markdown, encoding="utf-8")
 
     total_phrases = sum(len(e[2]) for e in entries)
     total_duration = sum(e[1] for e in entries)
