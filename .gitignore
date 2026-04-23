@@ -1,60 +1,11 @@
-# Secrets
-.env
-.env.local
-*.pem
-*.key
-
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.egg
-*.egg-info/
-.eggs/
-build/
-dist/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
-# Editors / IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-
-# Node / Remotion (installed on demand, not vendored)
-node_modules/
-package-lock.json
-yarn.lock
-.npm/
-
-# Manim render artifacts (when running skills/manim-video scripts locally)
-media/
-*.log
-
-# Session artifacts if someone invokes the skill inside the project dir
-# (normally outputs go to <videos_dir>/edit/ — keep these as a safety net)
+*.pyc
+.env
 edit/
-transcripts/
-animations/
-clips_graded/
-clips_preview/
-downloads/
-verify/
-preview.mp4
-final.mp4
-base.mp4
-base_preview.mp4
-master.srt
-takes_packed.md
-edl.json
-project.md
+*.mp4
+*.wav
+*.mp3
+*.egg-info/
+dist/
+build/
+.sbom/
