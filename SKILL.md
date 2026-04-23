@@ -57,11 +57,15 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 
 ## Setup
 
-- `ELEVENLABS_API_KEY` in `.env` at project root or env. Ask and write `.env` if missing.
+First-time install lives in `install.md` (clone, deps, ffmpeg, skill registration, API key). Don't re-run it every session; on cold start just verify:
+
+- `ELEVENLABS_API_KEY` resolves — either in the environment or in `.env` at the video-use repo root. If missing, ask the user to paste one and write it to `.env` (never to the user's `<videos_dir>`).
 - `ffmpeg` + `ffprobe` on PATH.
-- Python deps: `pip install -e .`.
+- Python deps installed (`uv sync` or `pip install -e .` inside the repo).
 - `yt-dlp`, `manim`, Remotion installed only on first use.
 - This skill vendors `skills/manim-video/`. Read its SKILL.md when building a Manim slot.
+
+Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this SKILL.md. Resolve their paths relative to the directory containing this file — the skill is typically symlinked at `~/.claude/skills/video-use/` or `~/.codex/skills/video-use/`.
 
 ## Helpers
 
