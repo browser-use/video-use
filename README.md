@@ -72,8 +72,8 @@ copilot auth login             # Option A: browser login (recommended, no token 
 cp .env.example .env
 $EDITOR .env
 #   ELEVENLABS_API_KEY=...    ← for transcription (same as before)
-#   GITHUB_TOKEN=...          ← PAT with 'copilot' scope (option B)
-#                               https://github.com/settings/tokens
+#   GITHUB_TOKEN=...          ← fine-grained token with Copilot Requests permission
+#                               https://github.com/settings/tokens (option B)
 ```
 
 Then run the orchestrator against your video folder:

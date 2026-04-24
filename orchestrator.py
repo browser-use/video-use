@@ -10,7 +10,7 @@ No logic changes to the skill or helpers are required.
 
 Requirements:
   pip install -e ".[copilot]"          # github-copilot-sdk + pydantic
-  GITHUB_TOKEN=... in .env             # PAT with 'copilot' scope
+  GITHUB_TOKEN=... in .env             # fine-grained token with Copilot Requests permission
     OR  run `copilot auth login` once  # sign in via browser (no token needed)
   ELEVENLABS_API_KEY=... in .env       # for transcription
   ffmpeg and ffprobe on PATH
@@ -103,16 +103,49 @@ def _is_under(path: Path, parent: Path) -> bool:
         return False
 
 
+def _resolve_session_path(raw_path: str, base_dir: Path) -> Path:
+    """Resolve a model-provided path relative to the session videos directory."""
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = base_dir / path
+    return path.resolve()
+
+
+def _validate_edit_dir_path(
+    raw_path: str,
+    *,
+    videos_dir: Path,
+    edit_dir: Path,
+    label: str,
+    must_exist: bool = False,
+) -> Path:
+    """Resolve a session path and enforce the edit_dir sandbox."""
+    path = _resolve_session_path(raw_path, videos_dir)
+    if not _is_under(path, edit_dir):
+        raise ValueError(f"{label} must stay inside {edit_dir}: {raw_path}")
+    if must_exist and not path.exists():
+        raise ValueError(f"{label} does not exist: {path}")
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Helpers runner
 # ---------------------------------------------------------------------------
 
 
-def _run_helper(args: list[str]) -> tuple[int, str, str]:
-    """Run a Python helper from the helpers/ directory."""
+async def _run_helper(args: list[str]) -> tuple[int, str, str]:
+    """Run a Python helper from the helpers/ directory without blocking the event loop."""
     cmd = [sys.executable] + args
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    return proc.returncode, proc.stdout, proc.stderr
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_bytes, stderr_bytes = await proc.communicate()
+    stdout = stdout_bytes.decode(errors="replace") if stdout_bytes is not None else ""
+    stderr = stderr_bytes.decode(errors="replace") if stderr_bytes is not None else ""
+    returncode = proc.returncode if proc.returncode is not None else 1
+    return returncode, stdout, stderr
 
 
 def _format_result(returncode: int, stdout: str, stderr: str) -> str:
@@ -145,18 +178,20 @@ def _prepare_image_attachment(img_path: Path) -> dict:
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             tmp_path = Path(tmp.name)
         try:
-            subprocess.run(
+            result = subprocess.run(
                 [
                     "ffmpeg", "-y", "-i", str(img_path),
                     "-vf", "scale='min(960,iw)':-2",
                     str(tmp_path),
                 ],
-                capture_output=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 check=False,
             )
-            raw = tmp_path.read_bytes()
-            mime = "image/jpeg"
-        except Exception:
+            if result.returncode == 0 and tmp_path.exists() and tmp_path.stat().st_size > 0:
+                raw = tmp_path.read_bytes()
+                mime = "image/jpeg"
+        except OSError:
             pass
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -257,7 +292,7 @@ async def run_session(
             cmd += ["--language", params.language]
         if params.num_speakers:
             cmd += ["--num-speakers", str(params.num_speakers)]
-        rc, out, err = _run_helper(cmd)
+        rc, out, err = await _run_helper(cmd)
         return _format_result(rc, out, err)
 
     @define_tool(
@@ -275,7 +310,7 @@ async def run_session(
             cmd += ["--workers", str(params.workers)]
         if params.num_speakers:
             cmd += ["--num-speakers", str(params.num_speakers)]
-        rc, out, err = _run_helper(cmd)
+        rc, out, err = await _run_helper(cmd)
         return _format_result(rc, out, err)
 
     @define_tool(
@@ -289,7 +324,7 @@ async def run_session(
         cmd = [str(HELPERS_DIR / "pack_transcripts.py"), "--edit-dir", str(edit_dir)]
         if params.silence_threshold is not None:
             cmd += ["--silence-threshold", str(params.silence_threshold)]
-        rc, out, err = _run_helper(cmd)
+        rc, out, err = await _run_helper(cmd)
         return _format_result(rc, out, err)
 
     # Side-channel for the last timeline image path so it can be attached in the
@@ -320,7 +355,7 @@ async def run_session(
             cmd += ["--n-frames", str(params.n_frames)]
         if params.transcript_path:
             cmd += ["--transcript", params.transcript_path]
-        rc, out, err = _run_helper(cmd)
+        rc, out, err = await _run_helper(cmd)
         result = _format_result(rc, out, err)
         if rc == 0 and out_img.exists():
             _pending_images.append(out_img)
@@ -336,10 +371,27 @@ async def run_session(
         skip_permission=True,
     )
     async def render(params: RenderParams) -> str:
+        try:
+            edl_path = _validate_edit_dir_path(
+                params.edl_path,
+                videos_dir=videos_dir,
+                edit_dir=edit_dir,
+                label="edl_path",
+                must_exist=True,
+            )
+            output_path = _validate_edit_dir_path(
+                params.output_path,
+                videos_dir=videos_dir,
+                edit_dir=edit_dir,
+                label="output_path",
+            )
+        except ValueError as exc:
+            return f"[invalid input]\n{exc}"
+
         cmd = [
             str(HELPERS_DIR / "render.py"),
-            params.edl_path,
-            "-o", params.output_path,
+            str(edl_path),
+            "-o", str(output_path),
         ]
         if params.preview:
             cmd.append("--preview")
@@ -349,7 +401,7 @@ async def run_session(
             cmd.append("--no-subtitles")
         if params.no_loudnorm:
             cmd.append("--no-loudnorm")
-        rc, out, err = _run_helper(cmd)
+        rc, out, err = await _run_helper(cmd)
         return _format_result(rc, out, err)
 
     @define_tool(
@@ -361,16 +413,33 @@ async def run_session(
         skip_permission=True,
     )
     async def grade(params: GradeParams) -> str:
+        try:
+            input_path = _validate_edit_dir_path(
+                params.input_path,
+                videos_dir=videos_dir,
+                edit_dir=edit_dir,
+                label="input_path",
+                must_exist=True,
+            )
+            output_path = _validate_edit_dir_path(
+                params.output_path,
+                videos_dir=videos_dir,
+                edit_dir=edit_dir,
+                label="output_path",
+            )
+        except ValueError as exc:
+            return f"[invalid input]\n{exc}"
+
         cmd = [
             str(HELPERS_DIR / "grade.py"),
-            params.input_path,
-            "-o", params.output_path,
+            str(input_path),
+            "-o", str(output_path),
         ]
         if params.filter:
             cmd += ["--filter", params.filter]
         elif params.preset:
             cmd += ["--preset", params.preset]
-        rc, out, err = _run_helper(cmd)
+        rc, out, err = await _run_helper(cmd)
         return _format_result(rc, out, err)
 
     # ------------------------------------------------------------------
@@ -389,9 +458,11 @@ async def run_session(
 
         if kind == "write":
             file_name = getattr(request, "file_name", None) or ""
-            if file_name and not _is_under(Path(file_name), edit_dir):
-                print(f"\n[write blocked — path outside edit_dir: {file_name}]", flush=True)
-                return PermissionRequestResult(kind="denied-by-rules")
+            if file_name:
+                file_path = _resolve_session_path(file_name, videos_dir)
+                if not _is_under(file_path, edit_dir):
+                    print(f"\n[write blocked — path outside edit_dir: {file_name}]", flush=True)
+                    return PermissionRequestResult(kind="denied-by-rules")
 
         return PermissionRequestResult(kind="approved")
 
@@ -569,7 +640,7 @@ def main() -> None:
         epilog=(
             "Authentication (pick one):\n"
             "  copilot auth login              Sign in via browser — no token needed\n"
-            "  GITHUB_TOKEN=... in .env        PAT with 'copilot' scope\n"
+            "  GITHUB_TOKEN=... in .env        Fine-grained token with Copilot Requests permission\n"
             "    https://github.com/settings/tokens\n"
             "\nModel options (via GitHub Copilot CLI — use /model inside session to switch):\n"
             "  (omit --model)                  Copilot auto-selects the best model\n"
@@ -578,7 +649,7 @@ def main() -> None:
             "  gpt-5                           OpenAI GPT-5\n"
             "  gpt-4.1                         OpenAI GPT-4.1\n"
             "\nEnvironment variables:\n"
-            "  GITHUB_TOKEN        PAT with 'copilot' scope (alternative to browser login)\n"
+            "  GITHUB_TOKEN        Fine-grained token with Copilot Requests permission\n"
             "  ELEVENLABS_API_KEY  ElevenLabs API key for transcription\n"
         ),
     )
