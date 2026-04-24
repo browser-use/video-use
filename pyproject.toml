@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 animations = ["manim"]
+whisper = ["faster-whisper>=1.2.1"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
