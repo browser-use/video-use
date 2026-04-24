@@ -32,10 +32,85 @@ The agent handles the clone, dependencies, skill registration, and prompts you o
 
 Then point your agent at a folder of raw takes:
 
+## Get started
+
+Two ways to run video-use — pick the one that matches your subscription:
+
+### Option A — Claude Code (original)
+
+Requires an Anthropic API subscription or Claude Pro.
+
+```bash
+# 1. Clone and symlink into Claude Code's skills directory
+git clone https://github.com/browser-use/video-use
+cd video-use
+ln -s "$(pwd)" ~/.claude/skills/video-use
+
+# 2. Install deps
+pip install -e .
+brew install ffmpeg           # required
+brew install yt-dlp            # optional, for downloading online sources
+
+# 3. Add your ElevenLabs API key
+cp .env.example .env
+$EDITOR .env                   # ELEVENLABS_API_KEY=...
+```
+
+Then point Claude Code at a folder of raw takes:
+
 ```bash
 cd /path/to/your/videos
 claude    # or codex, hermes, etc.
 ```
+
+### Option B — GitHub Copilot (no Anthropic key required)
+
+Uses your existing GitHub Copilot subscription as the LLM backend via the
+[GitHub Copilot SDK](https://github.com/github/copilot-sdk). The SDK bundles the
+Copilot CLI automatically — no separate CLI install needed. Same pipeline, same
+production rules, same helpers.
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/browser-use/video-use
+cd video-use
+
+# 2. Install deps (includes the Copilot SDK)
+pip install -e ".[copilot]"
+brew install ffmpeg           # required
+brew install yt-dlp            # optional
+
+# 3. Authenticate — pick one:
+copilot auth login             # Option A: browser login (recommended, no token needed)
+#  — OR —
+cp .env.example .env
+$EDITOR .env
+#   ELEVENLABS_API_KEY=...    ← for transcription (same as before)
+#   GITHUB_TOKEN=...          ← fine-grained token with Copilot Requests permission
+#                               https://github.com/settings/tokens (option B)
+```
+
+Then run the orchestrator against your video folder:
+
+```bash
+python /path/to/video-use/orchestrator.py /path/to/your/videos
+```
+
+Available options:
+
+```
+# Model (omit to let Copilot auto-select — recommended)
+--model claude-opus-4.5   # Anthropic Claude Opus 4.5 — complex tasks, deep reasoning
+--model claude-sonnet-4.5 # Anthropic Claude Sonnet 4.5 — faster, most routine tasks
+--model gpt-5             # OpenAI GPT-5
+--model gpt-4.1           # OpenAI GPT-4.1
+
+# Other flags
+--enable-shell            # enable built-in shell tool (off by default for safety)
+--max-turns 200           # safety cap on interactive turns (default: 200)
+```
+
+You can also switch models mid-session with `/model` at the prompt.
 
 And in the session:
 
