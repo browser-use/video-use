@@ -6,7 +6,7 @@
 
 **video-use** 是一个面向智能体的视频剪辑工作流。把原始素材放进一个文件夹，和 Claude Code、Codex 或其他支持 shell 的 agent 对话，就可以得到剪辑后的 `final.mp4`。
 
-它适合口播、访谈、教程、旅行记录、活动花絮、产品发布等素材。这个分支已经把转写服务从 ElevenLabs 替换为**科大讯飞语音转写**。
+它适合口播、访谈、教程、旅行记录、活动花絮、产品发布等素材。当前版本使用**科大讯飞语音转写**生成逐词时间戳。
 
 ## 能做什么
 
@@ -24,7 +24,7 @@
 把下面这段发给 Claude Code、Codex、Hermes、Openclaw，或任何能访问 shell 的 agent：
 
 ```text
-Set up https://github.com/browser-use/video-use for me.
+Set up git@github.com:VanGoghBuilder/video-use.git for me.
 
 Read install.md first to install this repo, wire up ffmpeg, register the skill with whichever agent you're running under, and set up the iFlytek long-form ASR credentials — ask me to paste them when you need them. Then read SKILL.md for daily usage, and always read helpers/ because that's where the editing scripts live. After install, don't transcribe anything on your own — just tell me it's ready and wait for me to drop footage into a folder.
 ```

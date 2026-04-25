@@ -28,7 +28,7 @@ description: Install video-use into the current agent and wire up ffmpeg + iFlyt
 - 注册 skill 时要 symlink **整个目录**，不能只链接 `SKILL.md`。`SKILL.md` 和 `helpers/` 必须保持相邻。
 - 安装后至少运行一个真实命令验证，不要只检查文件是否存在。
 
-## Steps
+## 步骤
 
 ### 1. 克隆到稳定路径
 
