@@ -43,6 +43,8 @@ def load_api_key() -> str:
     v = os.environ.get("ELEVENLABS_API_KEY", "")
     if not v:
         sys.exit("ELEVENLABS_API_KEY not found in .env or environment")
+    if not v.strip():
+        sys.exit("ELEVENLABS_API_KEY is empty in .env or environment")
     return v
 
 
