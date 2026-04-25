@@ -1,61 +1,61 @@
 ---
 name: video-use-install
-description: Install video-use into the current agent (Claude Code, Codex, Hermes, Openclaw, etc.) and wire up ffmpeg + iFlytek long-form ASR credentials so the user can start editing immediately.
+description: Install video-use into the current agent and wire up ffmpeg + iFlytek long-form ASR credentials.
 ---
 
-# video-use install
+# video-use 安装说明
 
-Use this file only for first-time install or reconnect. For daily editing, read `SKILL.md`. Always read `helpers/` — that's where the scripts live.
+这个文件只用于首次安装或重新连接。日常剪辑请读 `SKILL.md`。每次实际工作前都要读 `helpers/`，因为转写、打包、渲染、调色等脚本都在那里。
 
-## What you're doing
+## 安装目标
 
-You're setting up a conversation-driven video editor for the user. After install, the user drops raw footage into any folder, runs their agent (`claude`, `codex`, etc.) there, and says "edit these into a launch video." You do the rest by reading `SKILL.md`.
+你要为用户配置一个对话式视频剪辑工作流。安装完成后，用户只需要把原始素材放到任意文件夹，在那里启动 agent（`claude`、`codex` 等），然后说“把这些素材剪成一个视频”。后续剪辑流程按 `SKILL.md` 执行。
 
-Three things must exist on this machine:
+本机需要具备三样东西：
 
-1. The `video-use` repo cloned somewhere stable.
-2. `ffmpeg` on `$PATH` (plus optional `yt-dlp` for online sources).
-3. iFlytek long-form ASR credentials in `.env` at the repo root (for transcription).
+1. `video-use` 仓库被克隆到一个稳定路径。
+2. `ffmpeg` 和 `ffprobe` 在 `$PATH` 上；`yt-dlp` 可选，用于下载在线视频。
+3. 仓库根目录的 `.env` 里有科大讯飞语音转写凭证。
 
-And one thing must be true about the current agent:
+当前 agent 还必须能发现这个 skill：
 
-4. It can discover `SKILL.md` — either via a global skills directory (`~/.claude/skills/`, `~/.codex/skills/`) or via a `CLAUDE.md` / system-prompt import.
+4. 它可以通过全局 skills 目录（如 `~/.claude/skills/`、`~/.codex/skills/`）发现 `SKILL.md`，或通过系统提示词 / `CLAUDE.md` 等方式导入。
 
-## Install prompt contract
+## 安装约定
 
-- Do everything yourself. Only ask the user for things you cannot generate — the iFlytek `APP_ID` / `SECRET_KEY`, and confirmation before `brew install`.
-- Prefer a stable clone path like `~/Developer/video-use` (not `/tmp`, not `~/Downloads`).
-- The skill references helpers by bare name (`transcribe.py`, `render.py`). That works because SKILL.md and `helpers/` ship together — keep them as siblings when you register the skill.
-- After install, verify by running one real command against one real file. Don't declare success on file-existence checks alone.
+- 尽量自己完成安装。只在需要用户提供无法生成的信息时提问，比如科大讯飞 `APP_ID` / `SECRET_KEY`，以及安装系统依赖前的确认。
+- 优先使用稳定路径，例如 `~/Developer/video-use`，不要放在 `/tmp` 或 `~/Downloads`。
+- 注册 skill 时要 symlink **整个目录**，不能只链接 `SKILL.md`。`SKILL.md` 和 `helpers/` 必须保持相邻。
+- 安装后至少运行一个真实命令验证，不要只检查文件是否存在。
 
 ## Steps
 
-### 1. Clone to a stable path
+### 1. 克隆到稳定路径
 
 ```bash
-test -d ~/Developer/video-use || git clone https://github.com/browser-use/video-use ~/Developer/video-use
+test -d ~/Developer/video-use || git clone git@github.com:VanGoghBuilder/video-use.git ~/Developer/video-use
 cd ~/Developer/video-use
 ```
 
-If the repo is already there, `git pull --ff-only` and continue.
+如果仓库已经存在，执行 `git pull --ff-only` 后继续。
 
-### 2. Install Python deps
+### 2. 安装 Python 依赖
 
 ```bash
-# Prefer uv if available; fall back to pip.
+# 优先使用 uv；没有 uv 时退回 pip。
 command -v uv >/dev/null && uv sync || pip install -e .
 ```
 
-`pyproject.toml` lists `requests`, `librosa`, `matplotlib`, `pillow`, `numpy`. No console scripts — helpers are invoked directly as `python helpers/<name>.py`.
+`pyproject.toml` 声明了 `requests`、`librosa`、`matplotlib`、`pillow`、`numpy` 等依赖。项目没有安装 console script，helper 直接用 `python helpers/<name>.py` 调用。
 
-### 3. Install ffmpeg (+ optional yt-dlp)
+### 3. 安装 ffmpeg 和可选 yt-dlp
 
-`ffmpeg` and `ffprobe` are hard requirements. `yt-dlp` is only needed if the user wants to pull sources from URLs.
+`ffmpeg` 和 `ffprobe` 是必需项。`yt-dlp` 只在用户需要从 URL 下载素材时才需要。
 
 ```bash
 # macOS
 command -v ffmpeg >/dev/null || brew install ffmpeg
-command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
+command -v yt-dlp >/dev/null || brew install yt-dlp     # 可选
 
 # Debian / Ubuntu
 # sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -65,95 +65,95 @@ command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 # sudo pacman -S ffmpeg yt-dlp
 ```
 
-If `brew` / `apt` / `pacman` requires a sudo prompt, tell the user the exact command and wait. Do not invent a password.
+如果 `brew`、`apt` 或 `pacman` 需要用户输入密码，把准确命令告诉用户并等待。不要猜密码。
 
-### 4. Register the skill with the current agent
+### 4. 注册到当前 agent
 
-Figure out which agent you are running under, and register once. A symlink of the whole repo directory is the right shape — helpers/ needs to sit next to SKILL.md.
+先判断当前运行在哪个 agent 下，然后注册一次。正确做法是 symlink 整个仓库目录，因为 `helpers/` 必须和 `SKILL.md` 在一起。
 
-- **Claude Code** (`~/.claude/` present):
+- **Claude Code**（存在 `~/.claude/`）：
 
     ```bash
     mkdir -p ~/.claude/skills
     ln -sfn ~/Developer/video-use ~/.claude/skills/video-use
     ```
 
-- **Codex** (`$CODEX_HOME` set, or `~/.codex/` present):
+- **Codex**（设置了 `$CODEX_HOME`，或存在 `~/.codex/`）：
 
     ```bash
     mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
     ln -sfn ~/Developer/video-use "${CODEX_HOME:-$HOME/.codex}/skills/video-use"
     ```
 
-- **Hermes / Openclaw / another agent with a skills directory**: symlink `~/Developer/video-use` into that agent's skills directory under the name `video-use`. If the agent has no skills directory, add a line to its system prompt / config pointing at `~/Developer/video-use/SKILL.md` (e.g. an `@~/Developer/video-use/SKILL.md` import in a `CLAUDE.md`-equivalent).
+- **Hermes / Openclaw / 其他有 skills 目录的 agent**：把 `~/Developer/video-use` symlink 到对应 skills 目录，名字用 `video-use`。如果没有 skills 目录，就在系统提示词或配置里指向 `~/Developer/video-use/SKILL.md`。
 
-If you can't tell which agent you're in, ask the user once: "which agent am I running under — Claude Code, Codex, or something else?" Then pick the right target.
+如果无法判断当前 agent，就问用户一次：“我现在运行在哪个 agent 下，是 Claude Code、Codex，还是别的？”然后选择对应注册方式。
 
-### 5. iFlytek ASR credentials
+### 5. 配置科大讯飞语音转写凭证
 
-iFlytek long-form ASR does all transcription. Without credentials, nothing transcribes.
+这个分支使用科大讯飞语音转写做所有转写。没有凭证就不能转写。
 
-1. Check existing state in this order and stop at the first hit:
+1. 按下面顺序检查已有状态，命中任意一种即可停止：
 
     ```bash
-    # a) env var already exported
+    # a) 环境变量已存在
     [ -n "$XFYUN_APP_ID" ] && [ -n "$XFYUN_SECRET_KEY" ] && echo "env"
-    # b) .env at repo root already has it
+    # b) 仓库根目录 .env 已存在
     grep -q '^XFYUN_APP_ID=..' ~/Developer/video-use/.env 2>/dev/null && \
       grep -q '^XFYUN_SECRET_KEY=..' ~/Developer/video-use/.env 2>/dev/null && echo "dotenv"
     ```
 
-2. If neither is set, ask the user exactly once:
+2. 如果都没有，向用户索要一次：
 
-    > I need your iFlytek long-form ASR credentials for transcription: `APP_ID` and `SECRET_KEY` from the Xunfei Open Platform app that has 语音转写 enabled. Paste both here — I'll write them to `~/Developer/video-use/.env`. Or if you already have `XFYUN_APP_ID` and `XFYUN_SECRET_KEY` exported, say "use env" and I'll skip.
+    > 我需要你的科大讯飞语音转写凭证：已开通“语音转写”的讯飞开放平台应用里的 `APP_ID` 和 `SECRET_KEY`。请把两项都发给我，我会写入 `~/Developer/video-use/.env`。如果你已经导出了 `XFYUN_APP_ID` 和 `XFYUN_SECRET_KEY`，回复 “use env” 即可。
 
-    When the user pastes credentials, write them to `~/Developer/video-use/.env`:
+    用户提供后，写入 `~/Developer/video-use/.env`：
 
     ```bash
     printf 'XFYUN_APP_ID=%s\nXFYUN_SECRET_KEY=%s\n' "$APP_ID" "$SECRET_KEY" > ~/Developer/video-use/.env
     chmod 600 ~/Developer/video-use/.env
     ```
 
-    Never echo the secret back in tool output. Never commit `.env`.
+    不要把 secret 回显到输出里。不要提交 `.env`。
 
-3. Sanity check without burning transcription quota:
+3. 做不消耗转写额度的 sanity check：
 
     ```bash
     python ~/Developer/video-use/helpers/transcribe.py --help >/dev/null && echo "xfyun helper OK"
     ```
 
-    Full credential validation requires creating a transcription task, so defer it until the user provides the first clip.
+    完整凭证验证需要创建真实转写任务，会消耗额度，所以等用户提供第一个素材后再做。
 
-### 6. Verify end-to-end
+### 6. 验证安装
 
-Run one real thing. Prefer the lightest verification that still proves the pipeline is wired up:
+运行一个足够轻量但真实的命令，确认链路可用：
 
 ```bash
 python ~/Developer/video-use/helpers/timeline_view.py --help >/dev/null && echo "helpers OK"
 ffprobe -version | head -1
 ```
 
-Full transcription test is optional at install time — it burns iFlytek transcription quota. Better to wait until the user hands you their first clip.
+安装阶段不要默认跑完整转写测试，因为会消耗讯飞额度。等用户给素材后再跑。
 
-### 7. Hand off
+### 7. 交付说明
 
-Tell the user, in one short message:
+用一条简短消息告诉用户：
 
-- Where the skill is installed (`~/Developer/video-use`).
-- That they should `cd` into their footage folder and start their agent there (e.g. `claude`).
-- That a good first message is: *"edit these into a launch video"* or *"inventory these takes and propose a strategy."*
-- That all outputs land in `<videos_dir>/edit/` — the repo stays clean.
+- skill 安装在哪里，例如 `~/Developer/video-use`。
+- 用户应该进入素材目录启动 agent，例如 `cd /path/to/videos && claude`。
+- 推荐第一句话可以是：“把这些素材剪成一个发布视频”，或“先盘点这些素材并给出剪辑策略”。
+- 所有输出都会写到 `<videos_dir>/edit/`，仓库目录保持干净。
 
-## Keeping the skill current
+## 更新 skill
 
-- `cd ~/Developer/video-use && git pull --ff-only` pulls the latest code. The symlink auto-picks it up on the next run.
-- If `pyproject.toml` changed deps, re-run `uv sync` / `pip install -e .` after pulling.
+- `cd ~/Developer/video-use && git pull --ff-only` 拉取最新代码。symlink 会在下次运行时自动使用新内容。
+- 如果 `pyproject.toml` 的依赖变了，拉取后重新执行 `uv sync` 或 `pip install -e .`。
 
-## Cold-start reminders
+## 冷启动提醒
 
-- Symlink the **whole directory**, not just `SKILL.md`. The helpers need to sit next to it.
-- If `.env` exists but either credential is empty, treat it the same as missing — don't assume existence means validity.
-- `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
-- `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
-- Never run transcription as part of install verification unless the user explicitly asks — ASR costs real money.
-- If the user is on Linux without a package manager Claude recognizes, print the manual `ffmpeg` install URL and wait rather than guessing.
+- symlink **整个目录**，不要只链接 `SKILL.md`。
+- 如果 `.env` 存在但任意凭证为空，当作缺失处理。
+- 静态构建版 `ffmpeg` 也可以，现代版本（≥ 4.x）即可。
+- `yt-dlp` 是可选项，用户第一次需要从 URL 拉素材时再装也行。
+- 不要在安装验证时默认跑转写，除非用户明确要求，因为 ASR 会产生费用。
+- 如果 Linux 环境没有可识别的包管理器，给出手动安装 `ffmpeg` 的链接或命令并等待用户处理。
