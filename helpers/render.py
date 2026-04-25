@@ -56,7 +56,7 @@ SUB_FORCE_STYLE = (
     "FontName=Helvetica,FontSize=18,Bold=1,"
     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,"
     "BorderStyle=1,Outline=2,Shadow=0,"
-    "Alignment=2,MarginV=35"
+    "Alignment=5,MarginV=0"
 )
 
 # -------- ASS subtitle config -------------------------------------------------
@@ -66,14 +66,14 @@ ASS_PLAY_RES_X = 1080
 ASS_PLAY_RES_Y = 1920
 
 # ASS style row (fields match Format line in [V4+ Styles])
-# FontSize 22 @ 1080p portrait, outline 2.5, alignment 2 (bottom-centre), MarginV 60
+# FontSize 22 @ 1080p portrait, outline 2.5, alignment 5 (middle-centre), MarginV 0
 ASS_STYLE_ROW = (
     "Style: Default,Helvetica,22,"
     "&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,"   # primary, secondary, outline, back
     "1,0,0,0,"                                        # bold, italic, underline, strikeout
     "100,100,0,0,"                                    # scaleX, scaleY, spacing, angle
     "1,2.5,0,"                                        # border style, outline, shadow
-    "2,10,10,60,1"                                    # alignment, marginL, marginR, marginV, encoding
+    "5,10,10,0,1"                                     # alignment 5=middle-centre, marginL, marginR, marginV, encoding
 )
 
 # Brand keywords highlighted in orange (#FF8C00 → ASS &HAABBGGRR = &H00008CFF)
