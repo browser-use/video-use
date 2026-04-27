@@ -49,7 +49,7 @@ except Exception:
 # every major vertical-video platform. Do not drop this below ~75 without a
 # specific reason.
 SUB_FORCE_STYLE = (
-    "FontName=Helvetica,FontSize=18,Bold=1,"
+    "FontName=Nirmala UI,FontSize=18,Bold=1,"
     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,"
     "BorderStyle=1,Outline=2,Shadow=0,"
     "Alignment=2,MarginV=90"
@@ -154,10 +154,13 @@ def extract_segment(
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Vertical reel output (1080x1920). Center-crop any landscape/square source
+    # to 9:16 first, then scale to target. For already-vertical sources the crop
+    # is a no-op when ih*9/16 >= iw.
     if draft:
-        scale = "scale=1280:-2"
+        scale = "crop='min(iw,ih*9/16)':ih,scale=720:1280"
     else:
-        scale = "scale=1920:-2"
+        scale = "crop='min(iw,ih*9/16)':ih,scale=1080:1920"
 
     vf_parts: list[str] = []
     if is_hdr_source(source):
