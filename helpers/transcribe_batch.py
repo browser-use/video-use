@@ -1,6 +1,6 @@
 """Batch-transcribe every video in a directory with 4 parallel workers.
 
-Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
+Walks <videos_dir> for common video extensions, runs OpenAI Whisper on
 each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
 
 Cached per-file: any source that already has a transcript is skipped.
@@ -20,7 +20,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one
+from transcribe import transcribe_one
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -51,10 +51,11 @@ def main() -> None:
         help="Optional ISO language code. Omit to auto-detect per file.",
     )
     ap.add_argument(
-        "--num-speakers",
-        type=int,
-        default=None,
-        help="Optional number of speakers. Improves diarization when known.",
+        "--model",
+        type=str,
+        default="base",
+        choices=["tiny", "base", "small", "medium", "large"],
+        help="Whisper model size (default: base).",
     )
     args = ap.parse_args()
 
@@ -77,8 +78,6 @@ def main() -> None:
         print("nothing to do")
         return
 
-    api_key = load_api_key()
-
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()
 
@@ -89,9 +88,8 @@ def main() -> None:
                 transcribe_one,
                 video=v,
                 edit_dir=edit_dir,
-                api_key=api_key,
                 language=args.language,
-                num_speakers=args.num_speakers,
+                model_name=args.model,
                 verbose=False,
             ): v
             for v in pending
