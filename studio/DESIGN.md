@@ -108,3 +108,27 @@ drag-drop. Remember last project in localStorage.
 Waveforms/filmstrips in the timeline (needs ffmpeg extraction cache — v2),
 subtitle style editing, grade editing beyond preset dropdown, speed ramps,
 multi-EDL tabs, Windows/Linux titlebar styling.
+
+## Remote control (agents drive the UI)
+
+The app serves `127.0.0.1:4859` (src-tauri/src/lib.rs):
+
+```
+GET  /state                  → {"edlPath", "slices", "selection", "playing", "playhead"}
+POST /cmd '{"op": ...}'      → forwarded to the webview
+```
+
+Ops: `open{path}` · `toggle` / `play` / `pause` · `seek{t}` · `select{i}` (null clears)
+· `undo` / `redo` · `reload` · `export{preview?}`.
+
+Example:
+```bash
+curl -s -X POST localhost:4859/cmd -d '{"op":"open","path":"/path/to/edit/edl.json"}'
+curl -s -X POST localhost:4859/cmd -d '{"op":"seek","t":12.4}'
+curl -s localhost:4859/state
+```
+
+`studio <path/to/edl.json>` as a CLI arg opens that project at launch.
+Combined with the file contract (agent writes edl.json → UI reloads live; human edits
+→ edit_log.jsonl), an agent can propose a cut, play it for the user, jump to a specific
+boundary, and re-render — fully hands-off.

@@ -7,6 +7,7 @@ export interface State {
   dir: string;
   edl: Edl | null;
   transcripts: Record<string, Word[]>;
+  sourcePaths: Record<string, string>;
   projectMd: string | null;
   selection: number | null;
   playhead: number;
@@ -37,6 +38,7 @@ export const initial: State = {
   dir: "",
   edl: null,
   transcripts: {},
+  sourcePaths: {},
   projectMd: null,
   selection: null,
   playhead: 0,
@@ -67,6 +69,7 @@ export function reducer(s: State, a: Action): State {
         dir: a.project.dir,
         edl: a.project.edl,
         transcripts: a.project.transcripts,
+        sourcePaths: a.project.sourcePaths,
         projectMd: a.project.projectMd,
       };
     case "commit":

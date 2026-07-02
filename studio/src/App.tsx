@@ -139,6 +139,7 @@ export default function App() {
           edl,
           raw,
           transcripts,
+          sourcePaths: {},
           projectMd: null,
         },
       });
@@ -192,6 +193,77 @@ export default function App() {
       unwatch?.();
     };
   }, [state.edlPath]);
+
+  // Remote control: CLI-arg project + localhost:4859 commands (agents drive the UI).
+  useEffect(() => {
+    let un: (() => void) | undefined;
+    let closed = false; // strict-mode remount: unsubscribe even if listen resolves after cleanup
+    void (async () => {
+      const initial = await tauri.invokeCmd<string | null>("initial_project");
+      if (initial && !closed) await openProject(initial);
+      const u = await tauri.onRemoteCmd((raw) => {
+        let cmd: { op?: string; path?: string; t?: number; i?: number; preview?: boolean };
+        try {
+          cmd = JSON.parse(raw);
+        } catch {
+          return;
+        }
+        const s = stateRef.current;
+        switch (cmd.op) {
+          case "open":
+            if (typeof cmd.path === "string") void openProject(cmd.path);
+            break;
+          case "toggle":
+            dispatch({ type: "toggle-play" });
+            break;
+          case "play":
+            if (!s.playing) dispatch({ type: "toggle-play" });
+            break;
+          case "pause":
+            if (s.playing) dispatch({ type: "toggle-play" });
+            break;
+          case "seek":
+            if (typeof cmd.t === "number") dispatch({ type: "seek", t: cmd.t });
+            break;
+          case "select":
+            dispatch({ type: "select", i: typeof cmd.i === "number" ? cmd.i : null });
+            break;
+          case "undo":
+            doUndo();
+            break;
+          case "redo":
+            doRedo();
+            break;
+          case "reload":
+            void reloadFromDisk();
+            break;
+          case "export":
+            if (s.edl) setExporting({ preview: !!cmd.preview });
+            break;
+        }
+      });
+      if (closed) u();
+      else un = u;
+    })();
+    return () => {
+      closed = true;
+      un?.();
+    };
+  }, [openProject, doUndo, doRedo, reloadFromDisk]);
+
+  // Report state for GET /state (coarse playhead so playback isn't an invoke storm).
+  const playheadCoarse = Math.round(state.playhead * 2) / 2;
+  useEffect(() => {
+    void tauri.invokeCmd("report_state", {
+      json: JSON.stringify({
+        edlPath: state.edlPath,
+        slices: state.edl?.ranges.length ?? 0,
+        selection: state.selection,
+        playing: state.playing,
+        playhead: playheadCoarse,
+      }),
+    });
+  }, [state.edlPath, state.edl, state.selection, state.playing, playheadCoarse]);
 
   // Native file drop opens a project.
   useEffect(() => {
@@ -291,7 +363,7 @@ export default function App() {
         <>
           <div className="main">
             <div className="stage">
-              <Preview edl={edl} playhead={state.playhead} playing={state.playing} />
+              <Preview edl={edl} sourcePaths={state.sourcePaths} playhead={state.playhead} playing={state.playing} />
               <Transport
                 playhead={state.playhead}
                 total={offsets[offsets.length - 1]}

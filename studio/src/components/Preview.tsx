@@ -5,6 +5,8 @@ import { outputToSource, segmentOffsets } from "../lib/virtualTime";
 
 interface Props {
   edl: Edl;
+  /** Source key → absolute path (resolved at load; falls back to the raw EDL value). */
+  sourcePaths?: Record<string, string>;
   playhead: number;
   playing: boolean;
 }
@@ -13,12 +15,16 @@ const DRIFT_PLAYING = 0.2; // resync threshold while playing (seek stutters cost
 const DRIFT_PAUSED = 1 / 60;
 const PRESEEK_WINDOW = 0.3; // pre-seek the next segment's element before the boundary
 
-/** One stacked <video> per source; the rAF output-clock lives in App, this maps it to elements. */
-export default function Preview({ edl, playhead, playing }: Props) {
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|heic)$/i;
+
+/** One stacked <video> (or <img> for photo stills) per source; the rAF output-clock lives in App. */
+export default function Preview({ edl, sourcePaths, playhead, playing }: Props) {
   const videosRef = useRef<Record<string, HTMLVideoElement | null>>({});
   const offsets = useMemo(() => segmentOffsets(edl.ranges), [edl.ranges]);
   const pos = outputToSource(edl.ranges, offsets, playhead);
   const activeKey = pos ? edl.ranges[pos.index].source : null;
+
+  const pathOf = (key: string, raw: string) => sourcePaths?.[key] ?? raw;
 
   // Runs every render: while playing, App ticks playhead each frame, so this
   // doubles as the per-frame drift-correction loop.
@@ -52,15 +58,27 @@ export default function Preview({ edl, playhead, playing }: Props) {
   return (
     <div className="preview-wrap">
       <div className="preview-frame">
-        {Object.entries(edl.sources ?? {}).map(([key, path]) => {
-          const src = fileUrl(path);
+        {Object.entries(edl.sources ?? {}).map(([key, rawPath]) => {
+          const src = fileUrl(pathOf(key, rawPath));
+          const visible = key === activeKey ? " visible" : "";
+          if (IMAGE_EXT.test(rawPath)) {
+            return (
+              <img
+                key={key}
+                className={"preview-video" + visible}
+                src={src || undefined}
+                alt=""
+                draggable={false}
+              />
+            );
+          }
           return (
             <video
               key={key}
               ref={(el) => {
                 videosRef.current[key] = el;
               }}
-              className={"preview-video" + (key === activeKey ? " visible" : "")}
+              className={"preview-video" + visible}
               src={src || undefined}
               preload="auto"
               playsInline

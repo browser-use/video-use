@@ -126,3 +126,21 @@ export async function onFileDrop(cb: (paths: string[]) => void): Promise<() => v
     if (ev.payload.type === "drop") cb(ev.payload.paths);
   });
 }
+
+/** Remote-control events from the localhost control server (see src-tauri/lib.rs). */
+export async function onRemoteCmd(cb: (raw: string) => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<string>("remote-cmd", (ev) => cb(ev.payload));
+}
+
+/** Invoke a Rust command; null in browser mode or on error. */
+export async function invokeCmd<T>(name: string, args?: Record<string, unknown>): Promise<T | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    return await invoke<T>(name, args);
+  } catch {
+    return null;
+  }
+}

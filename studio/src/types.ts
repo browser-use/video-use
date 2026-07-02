@@ -3,6 +3,7 @@ export interface Range {
   source: string;
   start: number;
   end: number;
+  kind?: string; // "video" (default) | "photo" — real EDLs tag photo stills
   beat?: string;
   quote?: string;
   reason?: string;

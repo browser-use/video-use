@@ -31,6 +31,8 @@ export interface LoadedProject {
   raw: string;
   transcripts: Record<string, Word[]>;
   projectMd: string | null;
+  /** Source key → absolute path, resolved against the videos dir / edit dir. */
+  sourcePaths: Record<string, string>;
 }
 
 export async function loadProject(edlPath: string): Promise<LoadedProject> {
@@ -38,6 +40,25 @@ export async function loadProject(edlPath: string): Promise<LoadedProject> {
   const edl = JSON.parse(raw) as Edl;
   if (!Array.isArray(edl.ranges)) throw new Error("edl.json has no ranges[]");
   const dir = dirname(edlPath);
+
+  // Real EDLs use relative source paths. They conventionally live in the
+  // videos dir (edit/'s parent), but check the edit dir too.
+  const videosDir = basename(dir) === "edit" ? dirname(dir) : dir;
+  const sourcePaths: Record<string, string> = {};
+  for (const [key, p] of Object.entries(edl.sources ?? {})) {
+    if (p.startsWith("/")) {
+      sourcePaths[key] = p;
+      continue;
+    }
+    const candidates = [`${videosDir}/${p}`, `${dir}/${p}`];
+    sourcePaths[key] = candidates[0];
+    for (const c of candidates) {
+      if (await tauri.fileExists(c)) {
+        sourcePaths[key] = c;
+        break;
+      }
+    }
+  }
 
   // Transcripts are keyed to sources by file stem (transcripts/C0103.json → source "C0103").
   const transcripts: Record<string, Word[]> = {};
@@ -72,7 +93,7 @@ export async function loadProject(edlPath: string): Promise<LoadedProject> {
     // non-fatal
   }
 
-  return { edlPath, dir, edl, raw, transcripts, projectMd };
+  return { edlPath, dir, edl, raw, transcripts, projectMd, sourcePaths };
 }
 
 export function serializeEdl(edl: Edl): string {
