@@ -1,0 +1,164 @@
+/* Design tokens — Screen Studio reference (DESIGN.md) */
+:root {
+  --bg-window: #0a0a0b;
+  --bg-panel: #161618;
+  --bg-elevated: #1e1e21;
+  --border: #2a2a2e;
+  --text: #f5f5f7;
+  --text-dim: #9b9ba3;
+  --text-faint: #5d5d66;
+  --accent: #5b5bd6;
+  --accent-soft: #5b5bd622;
+  --clip: #d99136;
+  --clip-border: #f0b45e;
+  --danger: #e5484d;
+
+  --radius-block: 10px;
+  --radius-btn: 8px;
+  --radius-panel: 14px;
+  --spring: cubic-bezier(0.3, 0.7, 0.3, 1);
+
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-window);
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-window);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Buttons */
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-btn);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition:
+    background 0.15s var(--spring),
+    border-color 0.15s var(--spring),
+    color 0.15s var(--spring),
+    opacity 0.15s var(--spring);
+}
+
+.btn:hover {
+  background: #26262a;
+  border-color: #3a3a40;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #6d6de0;
+  border-color: transparent;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.btn-ghost.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: #e5484d1a;
+}
+
+.kbd {
+  font-size: 10.5px;
+  opacity: 0.65;
+  font-family: inherit;
+}
+
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  padding: 3px 8px;
+  outline: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a40;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

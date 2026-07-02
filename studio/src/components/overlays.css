@@ -1,0 +1,252 @@
+/* Empty state --------------------------------------------------------------- */
+.empty-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 420px;
+  padding: 44px 36px;
+  background: var(--bg-panel);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-panel);
+  text-align: center;
+  transition: border-color 0.2s var(--spring);
+}
+
+.empty-card:hover {
+  border-color: #3a3a40;
+}
+
+.empty-icon {
+  color: var(--text-faint);
+}
+
+.empty-card h1 {
+  font-size: 16px;
+}
+
+.empty-hint {
+  font-weight: 400;
+  color: var(--text-dim);
+  max-width: 300px;
+}
+
+.empty-open {
+  height: 32px;
+  padding: 0 16px;
+  margin-top: 4px;
+}
+
+.empty-recents {
+  width: 100%;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.empty-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 11px;
+  border-radius: var(--radius-btn);
+  background: var(--bg-elevated);
+  transition: background 0.15s var(--spring);
+  text-align: left;
+}
+
+.empty-recent:hover {
+  background: #26262a;
+}
+
+.empty-recent-name {
+  font-weight: 600;
+}
+
+.empty-recent-path {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Export overlay ------------------------------------------------------------ */
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000a0;
+  backdrop-filter: blur(6px);
+}
+
+.export-card {
+  width: 640px;
+  max-width: calc(100vw - 60px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  box-shadow: 0 30px 80px #000000cc;
+}
+
+.export-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+}
+
+.export-head h2 {
+  font-size: 13.5px;
+}
+
+.export-status {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.export-status.running {
+  color: var(--accent);
+}
+
+.export-status.done {
+  color: #46a758;
+}
+
+.export-status.failed {
+  color: var(--danger);
+}
+
+.shimmer {
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -40% 0;
+  }
+  100% {
+    background-position: 140% 0;
+  }
+}
+
+.export-log {
+  height: 260px;
+  overflow-y: auto;
+  padding: 12px 18px;
+  background: var(--bg-window);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  user-select: text;
+}
+
+.log-line {
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-err {
+  color: #f2a0a3;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.export-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+}
+
+.export-path {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+/* Notes drawer + toasts ------------------------------------------------------ */
+.notes-drawer {
+  position: fixed;
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  width: 400px;
+  z-index: 30;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  box-shadow: -20px 0 50px #00000066;
+  animation: drawer-in 0.22s var(--spring);
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.notes-drawer pre {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  user-select: text;
+}
+
+.toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 15px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-block);
+  box-shadow: 0 12px 34px #000000aa;
+  animation: drawer-in 0.22s var(--spring);
+  white-space: nowrap;
+}
+
+.toast-error {
+  border-color: #e5484d66;
+  padding: 9px 15px;
+}
