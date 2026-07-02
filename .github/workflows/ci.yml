@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  skill-sync:
+    name: SKILL.md copies in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Root SKILL.md matches packaged copy
+        run: diff -u SKILL.md src/video_use/SKILL.md
+
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - name: Install video-use
+        run: pip install .
+
+      - name: Doctor
+        env:
+          ELEVENLABS_API_KEY: ci-dummy-key
+        run: video-use doctor
+
+      - name: Subcommand help screens
+        shell: bash
+        run: |
+          video-use --version
+          video-use skill | head -3
+          video-use skill manim-video | head -3
+          video-use where
+          for c in transcribe transcribe-batch pack timeline grade render; do
+            video-use "$c" --help > /dev/null
+          done
+          video-use grade --list-presets > /dev/null
+
+      - name: Render smoke test (synthetic clip + EDL)
+        shell: bash
+        run: |
+          mkdir -p smoke/edit
+          ffmpeg -y -f lavfi -i "testsrc2=duration=10:size=1280x720:rate=30" \
+                 -f lavfi -i "sine=frequency=440:duration=10" \
+                 -c:v libx264 -pix_fmt yuv420p -c:a aac smoke/clip.mp4 2>/dev/null
+          cat > smoke/edit/edl.json <<EOF
+          {
+            "version": 1,
+            "sources": {"clip": "$PWD/smoke/clip.mp4"},
+            "ranges": [
+              {"source": "clip", "start": 1.0, "end": 3.5, "beat": "HOOK", "quote": "", "reason": "ci"},
+              {"source": "clip", "start": 6.0, "end": 8.0, "beat": "CTA", "quote": "", "reason": "ci"}
+            ],
+            "grade": "neutral_punch",
+            "total_duration_s": 4.5
+          }
+          EOF
+          video-use render smoke/edit/edl.json -o smoke/edit/out.mp4 --no-subtitles
+          dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 smoke/edit/out.mp4)
+          echo "output duration: $dur"
+          python -c "import sys; d=float('$dur'); sys.exit(0 if 4.2 < d < 5.0 else 1)"
+
+      - name: Timeline view smoke test
+        shell: bash
+        run: |
+          video-use timeline smoke/edit/out.mp4 0 4 -o smoke/edit/tl.png
+          python -c "from pathlib import Path; assert Path('smoke/edit/tl.png').stat().st_size > 10000"
+
+      - name: Path containment regression
+        shell: bash
+        run: |
+          echo "secret" > smoke/secret.srt
+          cat > smoke/edit/evil.json <<EOF
+          {
+            "version": 1,
+            "sources": {"clip": "$PWD/smoke/clip.mp4"},
+            "ranges": [{"source": "clip", "start": 1.0, "end": 2.0, "beat": "X", "quote": "", "reason": ""}],
+            "grade": "none",
+            "subtitles": "../../secret.srt",
+            "total_duration_s": 1.0
+          }
+          EOF
+          if video-use render smoke/edit/evil.json -o smoke/edit/evil.mp4; then
+            echo "traversal EDL was not rejected" && exit 1
+          else
+            echo "traversal rejected as expected"
+          fi
