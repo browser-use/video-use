@@ -84,12 +84,31 @@ def resolve_grade_filter(grade_field: str | None) -> str:
     return grade_field
 
 
-def resolve_path(maybe_path: str, base: Path) -> Path:
-    """Resolve a path that may be absolute or relative to `base`."""
+# Set by --unsafe-paths: disables the containment check in resolve_path.
+_allow_outside_project = False
+
+
+def resolve_path(maybe_path: str, base: Path, contain: bool = False) -> Path:
+    """Resolve a path that may be absolute or relative to `base`.
+
+    contain=True restricts the result to the project directory (the parent of
+    the edit dir). Overlay and subtitle paths are session artifacts; an EDL
+    obtained from elsewhere must not be able to point ffmpeg at files outside
+    the project — the subtitles filter would burn their contents into the
+    rendered frames. Sources are exempt: footage legitimately lives anywhere.
+    """
     p = Path(maybe_path)
-    if p.is_absolute():
-        return p
-    return (base / p).resolve()
+    resolved = p.resolve() if p.is_absolute() else (base / p).resolve()
+    if contain and not _allow_outside_project:
+        root = base.resolve().parent
+        if not (resolved == root or resolved.is_relative_to(root)):
+            sys.exit(
+                f"EDL path escapes the project directory: {maybe_path}\n"
+                f"  resolved: {resolved}\n"
+                f"  project:  {root}\n"
+                "Move the file under the project, or re-run with --unsafe-paths."
+            )
+    return resolved
 
 
 # -------- HDR → SDR tone mapping (HLG / PQ sources) --------------------------
@@ -514,7 +533,7 @@ def build_final_composite(
 
     inputs: list[str] = ["-i", str(base_path)]
     for ov in overlays:
-        ov_path = resolve_path(ov["file"], edit_dir)
+        ov_path = resolve_path(ov["file"], edit_dir, contain=True)
         inputs += ["-i", str(ov_path)]
 
     filter_parts: list[str] = []
@@ -601,7 +620,15 @@ def main() -> None:
         action="store_true",
         help="Skip audio loudness normalization. Default is on (-14 LUFS, -1 dBTP, LRA 11).",
     )
+    ap.add_argument(
+        "--unsafe-paths",
+        action="store_true",
+        help="Allow EDL overlay/subtitle paths outside the project directory",
+    )
     args = ap.parse_args()
+
+    global _allow_outside_project
+    _allow_outside_project = args.unsafe_paths
 
     edl_path = args.edl.resolve()
     if not edl_path.exists():
@@ -633,7 +660,7 @@ def main() -> None:
             subs_path = edit_dir / "master.srt"
             build_master_srt(edl, edit_dir, subs_path)
         elif edl.get("subtitles"):
-            subs_path = resolve_path(edl["subtitles"], edit_dir)
+            subs_path = resolve_path(edl["subtitles"], edit_dir, contain=True)
             if not subs_path.exists():
                 print(f"warning: subtitles path in EDL does not exist: {subs_path}")
                 subs_path = None
