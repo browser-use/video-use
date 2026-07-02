@@ -27,9 +27,11 @@ VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".
 
 
 def find_videos(videos_dir: Path) -> list[Path]:
+    # Skip hidden files — notably macOS "._*" AppleDouble sidecars on
+    # exFAT/NTFS volumes, which look like tiny videos but aren't.
     videos = sorted(
         p for p in videos_dir.iterdir()
-        if p.is_file() and p.suffix in VIDEO_EXTS
+        if p.is_file() and p.suffix in VIDEO_EXTS and not p.name.startswith(".")
     )
     return videos
 
