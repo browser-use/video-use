@@ -51,6 +51,7 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
     ├── master.srt               ← output-timeline subtitles
     ├── downloads/               ← yt-dlp outputs
     ├── verify/                  ← debug frames / timeline PNGs
+    ├── edit_log.jsonl           ← human edits made outside this conversation (Studio)
     ├── preview.mp4
     └── final.mp4
 ```
@@ -300,6 +301,22 @@ Append one section per session at `<edit>/project.md`:
 ```
 
 On startup, read `project.md` if it exists and summarize the last session in one sentence before asking whether to continue.
+
+## Human edits — `edit_log.jsonl`
+
+The user may edit the cut directly, outside this conversation (video-use Studio, or any tool that rewrites `edl.json`). Those tools append one JSON object per edit to `<edit>/edit_log.jsonl`:
+
+```json
+{"ts": "2026-07-02T18:04:11Z", "op": "trim", "segment": 3, "field": "end", "before": 6.85, "after": 5.90}
+{"ts": "2026-07-02T18:04:40Z", "op": "delete", "segment": 5, "range": {"source": "C0108", "start": 14.3, "end": 21.1, "beat": "TANGENT"}}
+```
+
+Ops are open vocabulary (`trim`, `move`, `delete`, `reorder`, `mute`, `speed`, `grade`, `subtitle_style`, …). Hard rules for working with it:
+
+1. **Read `edit_log.jsonl` (if it exists) before proposing any change to the cut.** The current `edl.json` already reflects these edits — the log tells you *which decisions were the human's*.
+2. **Human edits are ground truth for taste. Never revert one** unless the user explicitly asks.
+3. **Infer preferences from the pattern, not the individual values.** Three tightened segment tails → the user wants faster pacing everywhere; a deleted tangent → cut tangents more aggressively in your next proposal. Apply the inference to everything you propose afterward.
+4. **Persist what you inferred.** One line per inferred preference in `project.md` under the session's Decisions, marked as coming from human edits. Note the timestamp of the last log entry you processed so the next session knows where to resume reading.
 
 ## Anti-patterns
 
