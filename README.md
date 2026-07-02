@@ -20,17 +20,24 @@ Try video-use in [Browser Use Cloud](https://cloud.browser-use.com/v4?utm_campai
 - **Self-evaluates the rendered output** at every cut boundary before showing you anything
 - **Persists session memory** in `project.md` so next week's session picks up where you left off
 
-## Setup prompt
+## Install
 
-Paste into Claude Code, Codex, Hermes, Openclaw, or any agent with shell access:
-
-```text
-Set up https://github.com/browser-use/video-use for me.
-
-Read install.md first to install this repo, wire up ffmpeg, register the skill with whichever agent you're running under, and set up the ElevenLabs API key — ask me to paste it when you need it. Then read SKILL.md for daily usage, and always read helpers/ because that's where the editing scripts live. After install, don't transcribe anything on your own — just tell me it's ready and wait for me to drop footage into a folder.
+```bash
+uv tool install video-use
+mkdir -p ~/.claude/skills/video-use
+video-use skill > ~/.claude/skills/video-use/SKILL.md
+video-use doctor
 ```
 
-The agent handles the clone, dependencies, skill registration, and prompts you once for your ElevenLabs API key (grab one at [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys)).
+`doctor` tells you if anything is missing (ffmpeg, API key). Store your ElevenLabs key with `video-use key` (grab one at [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys)).
+
+Or let your agent do it — paste into Claude Code, Codex, Hermes, Openclaw, or any agent with shell access:
+
+```text
+Set up video-use for me.
+
+Read https://raw.githubusercontent.com/browser-use/video-use/main/install.md and follow it: install the video-use tool, wire up ffmpeg, register the skill with whichever agent you're running under, and set up the ElevenLabs API key — ask me to paste it when you need it. After install, don't transcribe anything on your own — just tell me it's ready and wait for me to drop footage into a folder.
+```
 
 Then point your agent at a folder of raw takes:
 
@@ -47,25 +54,18 @@ And in the session:
 
 It inventories the sources, proposes a strategy, waits for your OK, then produces `edit/final.mp4` next to your sources. All outputs live in `<videos_dir>/edit/` — the skill directory stays clean.
 
-## Manual install
+## Install from source
 
-If you'd rather do it by hand:
+If you'd rather hack on it:
 
 ```bash
-# 1. Clone and symlink into your agent's skills directory
 git clone https://github.com/browser-use/video-use ~/Developer/video-use
-ln -sfn ~/Developer/video-use ~/.claude/skills/video-use        # Claude Code
-# ln -sfn ~/Developer/video-use ~/.codex/skills/video-use       # Codex
-
-# 2. Install deps
 cd ~/Developer/video-use
-uv sync                         # or: pip install -e .
+pip install -e .                # same `video-use` command, editable
+video-use skill > ~/.claude/skills/video-use/SKILL.md
 brew install ffmpeg             # required
 brew install yt-dlp             # optional, for downloading online sources
-
-# 3. Add your ElevenLabs API key
-cp .env.example .env
-$EDITOR .env                    # ELEVENLABS_API_KEY=...
+video-use key                   # paste your ElevenLabs API key
 ```
 
 ## How it works
