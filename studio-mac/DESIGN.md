@@ -1,6 +1,6 @@
 # video-use Studio — design spec
 
-A native desktop app (Tauri 2 + React + TS) for reviewing and editing video-use EDLs.
+A native macOS app (SwiftUI + AVFoundation) for reviewing and editing video-use EDLs.
 Look and feel target: **Screen Studio** — near-black chrome, one indigo accent, chunky
 rounded timeline blocks, Apple-grade polish.
 
@@ -23,7 +23,7 @@ Writes:
   This is what the agent reads (SKILL.md "Human edits") to learn taste. Never rewrite old lines.
 
 Watches:
-- `edl.json` mtime (tauri fs watch or 500ms stat poll). External change (agent) → reload,
+- `edl.json` (DispatchSource file watch). External change (agent) → reload,
   animate timeline to new state, flash "agent synced" indicator. If the user has uncommitted
   local drags, external changes queue behind a small "reload" toast instead of clobbering.
 
@@ -111,7 +111,7 @@ multi-EDL tabs, Windows/Linux titlebar styling.
 
 ## Remote control (agents drive the UI)
 
-The app serves `127.0.0.1:4859` (src-tauri/src/lib.rs):
+The app serves `127.0.0.1:4860` (Sources/Studio/ControlServer.swift):
 
 ```
 GET  /state                  → {"edlPath", "slices", "selection", "playing", "playhead"}
