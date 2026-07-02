@@ -11,7 +11,9 @@ interface Props {
   playing: boolean;
 }
 
-const DRIFT_PLAYING = 0.2; // resync threshold while playing (seek stutters cost more than drift)
+// Resync threshold while playing. Must comfortably exceed the React clock's tick
+// granularity (~125ms) or every effect run seeks the video and playback stutters.
+const DRIFT_PLAYING = 0.4;
 const DRIFT_PAUSED = 1 / 60;
 const PRESEEK_WINDOW = 0.3; // pre-seek the next segment's element before the boundary
 

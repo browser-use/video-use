@@ -182,6 +182,8 @@
   width: 1px;
   background: #ffffffcc;
   pointer-events: none;
+  /* The output clock ticks React at ~8fps; glide between ticks. */
+  transition: left 130ms linear;
   z-index: 8;
 }
 

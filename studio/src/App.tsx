@@ -279,14 +279,22 @@ export default function App() {
     return () => un?.();
   }, [openProject]);
 
-  // Output clock: rAF advances the playhead in wall-clock time while playing.
+  // Output clock: rAF measures wall time, but React only sees ~8 ticks/sec.
+  // The <video> element plays natively between ticks — re-rendering the whole
+  // tree at 60fps starves the compositor and makes playback stutter.
   useEffect(() => {
     if (!state.playing) return;
+    const TICK_S = 0.125;
     let raf = 0;
     let last = performance.now();
+    let acc = 0;
     const loop = (now: number) => {
-      dispatch({ type: "tick", dt: (now - last) / 1000 });
+      acc += (now - last) / 1000;
       last = now;
+      if (acc >= TICK_S) {
+        dispatch({ type: "tick", dt: acc });
+        acc = 0;
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
