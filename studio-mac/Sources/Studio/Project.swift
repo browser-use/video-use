@@ -125,11 +125,38 @@ final class FileWatcher {
     private let queue = DispatchQueue(label: "video-use.studio.edl-watch")
     private var source: DispatchSourceFileSystemObject?
     private var fd: Int32 = -1
+    // exFAT/network volumes drop kqueue vnode events, so back the DispatchSource with a poll.
+    private var poll: DispatchSourceTimer?
+    private var lastStat: (mtime: TimeInterval, size: Int)?
 
     init(path: String, onChange: @escaping () -> Void) {
         self.path = path
         self.onChange = onChange
+        lastStat = FileWatcher.statOf(path)
         arm()
+        startPolling()
+    }
+
+    private static func statOf(_ path: String) -> (TimeInterval, Int)? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
+        let m = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let sz = (attrs[.size] as? NSNumber)?.intValue ?? 0
+        return (m, sz)
+    }
+
+    /// 1s mtime+size poll — fires the same reload path when either changes (covers exFAT where the
+    /// DispatchSource stays silent). The Store dedupes by content, so an occasional double-fire is a no-op.
+    private func startPolling() {
+        let t = DispatchSource.makeTimerSource(queue: queue)
+        t.schedule(deadline: .now() + 1, repeating: 1.0)
+        t.setEventHandler { [weak self] in
+            guard let self, let cur = FileWatcher.statOf(self.path) else { return }
+            if let last = self.lastStat, last.mtime == cur.0, last.size == cur.1 { return }
+            self.lastStat = (cur.0, cur.1)
+            self.onChange()
+        }
+        poll = t
+        t.resume()
     }
 
     private func arm() {
@@ -145,6 +172,7 @@ final class FileWatcher {
         s.setEventHandler { [weak self] in
             guard let self else { return }
             let flags = s.data
+            self.lastStat = FileWatcher.statOf(self.path)   // keep the poll baseline in sync
             self.onChange()
             if flags.contains(.rename) || flags.contains(.delete) { self.rearm() }
         }
@@ -165,5 +193,7 @@ final class FileWatcher {
     func stop() {
         source?.cancel()
         source = nil
+        poll?.cancel()
+        poll = nil
     }
 }
