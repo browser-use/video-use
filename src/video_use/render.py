@@ -55,6 +55,24 @@ SUB_FORCE_STYLE = (
     "Alignment=2,MarginV=90"
 )
 
+
+def sub_force_style(style: dict | None) -> str:
+    """ASS force_style from the EDL's optional subtitle_style object.
+
+    Schema (written by Studio): {"enabled", "size", "margin_v", "uppercase",
+    "chunk_words"}. Absent → the shipped default style.
+    """
+    if not style:
+        return SUB_FORCE_STYLE
+    size = int(style.get("size", 18))
+    margin_v = int(style.get("margin_v", 90))
+    return (
+        f"FontName=Helvetica,FontSize={size},Bold=1,"
+        "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,"
+        "BorderStyle=1,Outline=2,Shadow=0,"
+        f"Alignment=2,MarginV={margin_v}"
+    )
+
 # -------- Helpers ------------------------------------------------------------
 
 
@@ -340,6 +358,9 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
     """
     transcripts_dir = edit_dir / "transcripts"
     sources = edl["sources"]
+    style = edl.get("subtitle_style") or {}
+    chunk_words = max(1, int(style.get("chunk_words", 2)))
+    uppercase = bool(style.get("uppercase", True))
 
     entries: list[tuple[float, float, str]] = []
     seg_offset = 0.0
@@ -369,7 +390,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             current.append(w)
             # Break if the current text ends in punctuation or we hit 2 words
             ends_in_punct = bool(text) and text[-1] in PUNCT_BREAK
-            if len(current) >= 2 or ends_in_punct:
+            if len(current) >= chunk_words or ends_in_punct:
                 chunks.append(current)
                 current = []
         if current:
@@ -386,7 +407,8 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             text = re.sub(r"\s+", " ", text).strip()
             # Strip trailing punctuation for cleaner uppercase look
             text = text.rstrip(",;:")
-            text = text.upper()
+            if uppercase:
+                text = text.upper()
             entries.append((out_start, out_end, text))
 
         seg_offset += seg_duration
@@ -518,6 +540,7 @@ def build_final_composite(
     subtitles_path: Path | None,
     out_path: Path,
     edit_dir: Path,
+    sub_style: dict | None = None,
 ) -> None:
     """Final pass: base → overlays (PTS-shifted) → subtitles LAST → out.
 
@@ -558,7 +581,7 @@ def build_final_composite(
     if has_subs:
         subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
         filter_parts.append(
-            f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
+            f"{current}subtitles='{subs_abs}':force_style='{sub_force_style(sub_style)}'[outv]"
         )
         out_label = "[outv]"
     else:
@@ -667,13 +690,16 @@ def main() -> None:
 
     # 4. Composite (overlays + subtitles LAST) → intermediate (pre-loudnorm) path
     overlays = edl.get("overlays") or []
+    sub_style = edl.get("subtitle_style") or None
+    if sub_style and sub_style.get("enabled") is False:
+        subs_path = None
     if args.no_loudnorm:
         # Composite directly to final output
-        build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
+        build_final_composite(base_path, overlays, subs_path, out_path, edit_dir, sub_style)
     else:
         # Composite to a temp file, then run loudnorm → final output
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
-        build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
+        build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir, sub_style)
         print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
         apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft)
         tmp_composite.unlink(missing_ok=True)
