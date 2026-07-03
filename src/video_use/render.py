@@ -404,6 +404,8 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             if out_end <= out_start:
                 out_end = out_start + 0.4
             text = " ".join((w.get("text") or "").strip() for w in chunk)
+            # Scribe transcribes reported speech with literal quote marks — noise in captions.
+            text = text.replace('"', "").replace("“", "").replace("”", "")
             text = re.sub(r"\s+", " ", text).strip()
             # Strip trailing punctuation for cleaner uppercase look
             text = text.rstrip(",;:")
