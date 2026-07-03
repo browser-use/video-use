@@ -25,8 +25,7 @@ final class PlayerHostView: NSView {
         wantsLayer = true
         let root = CALayer()
         root.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
-        root.cornerRadius = 12
-        root.masksToBounds = true
+        root.masksToBounds = true   // outer StageView clip supplies the corner radius
         layer = root
         playerLayer.videoGravity = .resizeAspect
         playerLayer.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)

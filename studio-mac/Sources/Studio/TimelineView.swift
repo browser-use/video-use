@@ -13,8 +13,6 @@ struct TimelineView: View {
     @State private var zoomBase: Double = 1
     @State private var panOffset: Double = 0   // points scrolled from the left
     @State private var viewWidth: CGFloat = 1
-    @State private var hoverX: CGFloat?
-    @State private var ticker = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
 
     private var pps: Double { (Double(viewWidth) / max(store.total, 0.001)) * zoom }
     private var contentW: Double { store.total * pps }
@@ -28,18 +26,17 @@ struct TimelineView: View {
             ZStack(alignment: .topLeading) {
                 Theme.bgPanel
 
-                // Seek surface — clicking seeks to that output time.
+                // Seek surface — click or drag scrubs the video live.
                 Color.clear
                     .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0).onEnded { v in
-                        store.seek(to: timeAt(v.location.x))
-                    })
+                    .gesture(DragGesture(minimumDistance: 0)
+                        .onChanged { v in store.seek(to: timeAt(v.location.x), select: false, precise: false) }
+                        .onEnded { v in store.seek(to: timeAt(v.location.x)) })
 
                 VStack(alignment: .leading, spacing: 8) {
                     ruler()
                     clipTrack()
-                    overlayTrack()
-                    subtitleStrip
+                    captionTrack()
                 }
                 .padding(.vertical, 12)
 
@@ -50,7 +47,7 @@ struct TimelineView: View {
             .onAppear { viewWidth = geo.size.width }
             .onChange(of: geo.size.width) { _, w in viewWidth = w; clampPan() }
         }
-        .frame(height: 154)
+        .frame(height: 172)
         .background(Theme.bgPanel)
         .overlay(Rectangle().frame(height: 1).foregroundColor(Theme.border), alignment: .top)
         .gesture(
@@ -58,13 +55,12 @@ struct TimelineView: View {
                 .onChanged { applyZoom(zoomBase * $0) }
                 .onEnded { _ in zoomBase = zoom }
         )
+        // Hover-scrub: moving the mouse over the timeline scrubs the video to that spot (when paused).
         .onContinuousHover { phase in
-            switch phase {
-            case .active(let p): hoverX = p.x
-            case .ended: hoverX = nil
+            if case .active(let p) = phase, !store.playing {
+                store.seek(to: timeAt(p.x), select: false, precise: false)
             }
         }
-        .onReceive(ticker) { _ in edgePanStep() }
         .onChange(of: store.playhead) { _, _ in followPlayhead() }
         .onChange(of: store.total) { _, _ in clampPan() }
     }
@@ -78,20 +74,6 @@ struct TimelineView: View {
     }
 
     private func clampPan() { panOffset = min(max(panOffset, 0), maxPan) }
-
-    /// Hover within ~80px of an edge pans continuously; speed scales with how deep into the zone.
-    private func edgePanStep() {
-        guard zoomedIn, let hx = hoverX else { return }
-        let edge: CGFloat = 80
-        let maxSpeed = 16.0
-        var delta = 0.0
-        if hx < edge {
-            delta = -Double((edge - hx) / edge) * maxSpeed
-        } else if hx > viewWidth - edge {
-            delta = Double((hx - (viewWidth - edge)) / edge) * maxSpeed
-        }
-        if delta != 0 { panOffset = min(max(panOffset + delta, 0), maxPan) }
-    }
 
     private func followPlayhead() {
         guard zoomedIn else { return }
@@ -207,33 +189,45 @@ struct TimelineView: View {
             )
     }
 
-    // MARK: overlay + subtitle tracks
+    // MARK: caption lane — the actual caption chunks, click to jump
 
-    private func overlayTrack() -> some View {
+    private func captionTrack() -> some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 4).fill(Theme.bgElevated.opacity(0.5))
-                .frame(height: 14)
-            ForEach(Array((store.edl.overlays ?? []).enumerated()), id: \.offset) { _, ov in
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Theme.accent)
-                    .frame(width: max(CGFloat(ov.duration * pps), 4), height: 14)
-                    .offset(x: x(ov.start_in_output))
+            RoundedRectangle(cornerRadius: 6).fill(Theme.bgElevated.opacity(0.35))
+                .frame(height: 26)
+
+            if store.cues.isEmpty || !store.subtitleStyle.enabled {
+                Text(store.subtitleStyle.enabled ? "no captions" : "subtitles off")
+                    .font(.system(size: 10)).foregroundColor(Theme.textFaint)
+                    .padding(.leading, 8).frame(height: 26, alignment: .leading)
+            } else {
+                ForEach(Array(store.cues.enumerated()), id: \.offset) { _, c in
+                    let left = x(c.start)
+                    let w = max(x(c.end) - x(c.start) - 1, 3)
+                    let active = store.playhead >= c.start && store.playhead < c.end
+                    captionBlock(text: c.text, active: active, width: w)
+                        .frame(width: w, height: 26)
+                        .offset(x: left)
+                        .onTapGesture { store.seek(to: c.start + 0.01) }
+                }
             }
         }
-        .frame(height: 14, alignment: .topLeading)
+        .frame(height: 26, alignment: .topLeading)
     }
 
-    private var subtitleStrip: some View {
-        HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 3)
-                .fill(store.subtitleStyle.enabled && !store.cues.isEmpty ? Theme.accent.opacity(0.4) : Theme.bgElevated)
-                .frame(height: 6)
-            Text(store.cues.isEmpty ? "no captions" : "\(store.cues.count) captions")
-                .font(.system(size: 8))
-                .foregroundColor(Theme.textFaint)
-                .fixedSize()
-        }
-        .frame(height: 8)
+    private func captionBlock(text: String, active: Bool, width: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 5)
+            .fill(active ? Theme.accent : Theme.accent.opacity(0.5))
+            .overlay(alignment: .leading) {
+                if width > 26 {
+                    Text(text)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 5)
+                }
+            }
+            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(active ? 0.5 : 0.12), lineWidth: 1))
     }
 
     // MARK: playhead

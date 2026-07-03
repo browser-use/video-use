@@ -32,6 +32,10 @@ final class Store: ObservableObject {
     @Published var subtitleStyle = SubtitleStyle.default
     @Published var cues: [Cue] = []
 
+    // Zoom camera (Screen Studio-style push-ins). Prototype: seeded with a demo region on load.
+    @Published var zoomRegions: [ZoomRegion] = []
+    @Published var selectedZoom: Int?
+
     // Files pane
     @Published var showFiles = false
     @Published var videoFiles: [VideoFile] = []
@@ -61,7 +65,7 @@ final class Store: ObservableObject {
     private var control: ControlServer?
 
     init() {
-        let interval = CMTime(seconds: 0.05, preferredTimescale: 600)
+        let interval = CMTime(value: 1, timescale: 60)   // 60fps so the zoom camera is buttery
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self else { return }
             self.playhead = max(0, min(time.seconds.isFinite ? time.seconds : 0, self.total))
@@ -115,6 +119,7 @@ final class Store: ObservableObject {
             lastWrittenJSON = nil
             subtitleStyle = p.edl.subtitle_style ?? .default
             rebuild(preservePlayhead: false)
+            zoomRegions = []
             discoverFiles()
             watcher?.stop()
             watcher = FileWatcher(path: path) { [weak self] in
@@ -189,13 +194,35 @@ final class Store: ObservableObject {
         playing = false
     }
 
-    func seek(to t: Double) {
+    private var scrubbing = false
+    private var scrubTarget: Double?
+
+    /// select:false skips updating the slice selection (used for hover/drag scrubbing so the
+    /// inspector doesn't thrash). precise:false coalesces seeks — the playhead updates instantly
+    /// while only one tolerant 4K seek is ever in flight — so scrubbing stays responsive.
+    func seek(to t: Double, select: Bool = true, precise: Bool = true) {
         let clamped = max(0, min(t, total))
-        let time = CMTime(seconds: clamped, preferredTimescale: 600)
-        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         playhead = clamped
-        // Scrubbing (incl. ruler clicks) tracks the slice under the playhead.
-        selection = VirtualTime.segmentAtOutput(offsets, clamped)
+        if select { selection = VirtualTime.segmentAtOutput(offsets, clamped) }
+        if precise {
+            let time = CMTime(seconds: clamped, preferredTimescale: 600)
+            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        } else {
+            scrubTarget = clamped
+            pumpScrub()
+        }
+    }
+
+    private func pumpScrub() {
+        guard !scrubbing, let t = scrubTarget else { return }
+        scrubTarget = nil
+        scrubbing = true
+        let time = CMTime(seconds: t, preferredTimescale: 600)
+        let tol = CMTime(seconds: 0.25, preferredTimescale: 600)
+        player.seek(to: time, toleranceBefore: tol, toleranceAfter: tol) { [weak self] _ in
+            self?.scrubbing = false
+            self?.pumpScrub()
+        }
     }
 
     /// Seek to the output-time start of a segment.
@@ -206,6 +233,31 @@ final class Store: ObservableObject {
 
     func select(_ i: Int?) {
         if let i, i >= 0, i < edl.ranges.count { selection = i } else { selection = nil }
+        if i != nil { selectedZoom = nil }
+    }
+
+    // MARK: - Zoom regions (Screen Studio-style camera)
+
+    func selectZoom(_ i: Int?) {
+        guard let i, i >= 0, i < zoomRegions.count else { selectedZoom = nil; return }
+        let r = zoomRegions[i]
+        seek(to: (r.start + r.end) / 2)      // jump into the region so the push-in is visible
+        selectedZoom = i                     // after seek (seek sets slice selection, not zoom)
+    }
+
+    func addZoomAtPlayhead() {
+        let start = min(playhead, max(0, total - 2))
+        let end = min(start + 2.0, total)
+        zoomRegions.append(ZoomRegion(start: start, end: end, scale: 1.5,
+                                      focus: UnitPoint(x: 0.5, y: 0.45), ramp: 0.6))
+        zoomRegions.sort { $0.start < $1.start }
+        selectZoom(zoomRegions.firstIndex { $0.start <= playhead && playhead <= $0.end })
+    }
+
+    func removeZoom(_ i: Int) {
+        guard i >= 0, i < zoomRegions.count else { return }
+        zoomRegions.remove(at: i)
+        selectedZoom = nil
     }
 
     // MARK: - Subtitles
@@ -327,7 +379,8 @@ final class Store: ObservableObject {
         let before = r.start
         r.start = v
         var e = edl; e.ranges[index] = r
-        commit(e, op: "trim", fields: ["segment": index, "field": "start", "before": before, "after": v])
+        commit(e, op: "trim", fields: ["segment": index, "beat": r.beat ?? "", "source": r.source,
+                                       "field": "start", "before": before, "after": v])
     }
 
     func setOut(_ index: Int, to value: Double, snapping: Bool = true) {
@@ -341,7 +394,8 @@ final class Store: ObservableObject {
         let before = r.end
         r.end = v
         var e = edl; e.ranges[index] = r
-        commit(e, op: "trim", fields: ["segment": index, "field": "end", "before": before, "after": v])
+        commit(e, op: "trim", fields: ["segment": index, "beat": r.beat ?? "", "source": r.source,
+                                       "field": "end", "before": before, "after": v])
     }
 
     func nudgeIn(_ index: Int, by delta: Double) {
@@ -516,6 +570,15 @@ final class Store: ObservableObject {
         case "redo":     redo()
         case "reload":   reload()
         case "export":   export(preview: (obj["preview"] as? Bool) ?? false)
+        case "substyle":
+            var s = subtitleStyle
+            if let v = (obj["size"] as? NSNumber)?.doubleValue { s.size = v }
+            if let v = (obj["margin_v"] as? NSNumber)?.doubleValue { s.margin_v = v }
+            if let v = obj["uppercase"] as? Bool { s.uppercase = v }
+            if let v = obj["chunk_words"] as? Int { s.chunk_words = v }
+            if let v = obj["enabled"] as? Bool { s.enabled = v }
+            updateSubtitleStyle(s, commit: (obj["commit"] as? Bool) ?? false)
+        case "delete":   if let i = obj["i"] as? Int ?? selection { deleteSlice(i) }
         default:         break
         }
     }

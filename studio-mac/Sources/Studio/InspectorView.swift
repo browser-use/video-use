@@ -7,33 +7,54 @@ struct InspectorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if let i = store.selection, i < store.edl.ranges.count {
-                    sliceEditor(index: i, range: store.edl.ranges[i])
-                } else {
-                    projectPanel
-                }
+            VStack(alignment: .leading, spacing: 18) {
+                nowPlaying           // read-only context for the clip under the playhead
+                Divider().background(Theme.border)
+                subtitleControls     // the main thing you actually tune here
+                Divider().background(Theme.border)
+                projectPanel
             }
             .padding(16)
         }
-        .frame(width: 360)
+        .frame(width: 340)
         .background(Theme.bgPanel)
         .overlay(Rectangle().frame(width: 1).foregroundColor(Theme.border), alignment: .leading)
+    }
+
+    // MARK: now playing (read-only — the cut is edited by chat, not here)
+
+    private var nowPlaying: some View {
+        let i = VirtualTime.segmentAtOutput(store.offsets, store.playhead)
+        let r = (i != nil && i! < store.edl.ranges.count) ? store.edl.ranges[i!] : nil
+        return VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("NOW PLAYING")
+            if let r {
+                HStack(spacing: 8) {
+                    Text((r.beat ?? "CLIP").uppercased())
+                        .font(.system(size: 11, weight: .bold)).foregroundColor(.black)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Theme.clip).clipShape(Capsule())
+                    Text(r.source).font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundColor(Theme.textDim)
+                    Spacer()
+                    Text(String(format: "%.1fs", r.duration))
+                        .font(.system(size: 11, design: .monospaced)).foregroundColor(Theme.textFaint)
+                }
+                if let quote = r.quote, !quote.isEmpty {
+                    Text("\u{201C}\(quote)\u{201D}")
+                        .font(.system(size: 13)).italic().foregroundColor(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text("—").foregroundColor(Theme.textFaint)
+            }
+        }
     }
 
     // MARK: project panel
 
     private var projectPanel: some View {
         VStack(alignment: .leading, spacing: 18) {
-            sectionHeader("PROJECT")
-            infoRow("Name", store.dir.map { Project.projectName(dir: $0) } ?? "—")
-            infoRow("Grade", store.edl.grade ?? "none")
-            infoRow("Subtitles", store.edl.subtitles ?? "—")
-            infoRow("Duration", VirtualTime.fmt(store.total))
-            infoRow("Slices", "\(store.edl.ranges.count)")
-
-            Divider().background(Theme.border)
-
             sectionHeader("SOURCES")
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(store.edl.sources.keys.sorted(), id: \.self) { key in
@@ -55,14 +76,10 @@ struct InspectorView: View {
 
             Divider().background(Theme.border)
 
-            subtitleControls
-
-            if store.edl.ranges.isEmpty {
-                Text("Select a clip in the timeline to edit it.")
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.textFaint)
-                    .padding(.top, 8)
-            }
+            sectionHeader("PROJECT")
+            infoRow("Grade", store.edl.grade ?? "none")
+            infoRow("Duration", VirtualTime.fmt(store.total))
+            infoRow("Clips", "\(store.edl.ranges.count)")
         }
     }
 
@@ -92,8 +109,8 @@ struct InspectorView: View {
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 108)
                 }
-                sliderRow("Size", keyPath: \.size, range: 10...48, suffix: "")
-                sliderRow("Bottom margin", keyPath: \.margin_v, range: 0...200, suffix: "")
+                sliderRow("Size", keyPath: \.size, range: 12...160, suffix: "")
+                sliderRow("Bottom margin", keyPath: \.margin_v, range: 0...220, suffix: "")
             } else {
                 Text("Captions hidden. Enable to preview and export burn-in.")
                     .font(.system(size: 11)).foregroundColor(Theme.textFaint)

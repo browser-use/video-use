@@ -12,7 +12,6 @@ struct ContentView: View {
                 if store.showFiles { FilesPane().transition(.move(edge: .leading)) }
                 VStack(spacing: 0) {
                     canvas
-                    transport
                     TimelineView()
                 }
                 InspectorView()
@@ -20,6 +19,7 @@ struct ContentView: View {
         }
         .background(Theme.bgWindow)
         .foregroundColor(Theme.text)
+        .onDeleteCommand { if let i = store.selection { store.deleteSlice(i) } }
         .sheet(isPresented: $store.showExport) { ExportSheet() }
     }
 
@@ -29,18 +29,48 @@ struct ContentView: View {
             if store.edlPath == nil {
                 emptyState
             } else {
-                PlayerView(player: store.player)
-                    .aspectRatio(store.renderAspect, contentMode: .fit)
-                    .overlay {
-                        if let caption = store.currentCaption {
-                            SubtitleOverlay(text: caption, style: store.subtitleStyle)
-                        }
+                let cam = ZoomCamera.resolve(at: store.playhead, regions: store.zoomRegions)
+                StageView(player: store.player, aspect: store.renderAspect,
+                          zoomScale: cam.scale, zoomAnchor: cam.anchor) {
+                    if let caption = store.currentCaption {
+                        SubtitleOverlay(text: caption, style: store.subtitleStyle)
                     }
-                    .padding(24)
-                    .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
+                }
+                .overlay(alignment: .bottom) { transportPill.padding(.bottom, 22) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Floating transport that hovers over the stage, Screen Studio style.
+    private var transportPill: some View {
+        HStack(spacing: 14) {
+            transportButton("backward.end.fill", size: 13) { store.seek(to: 0) }
+            Button(action: store.togglePlay) {
+                Image(systemName: store.playing ? "pause.fill" : "play.fill")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 38, height: 38)
+                    .background(Theme.accent)
+                    .foregroundColor(.white)
+                    .clipShape(Circle())
+                    .shadow(color: Theme.accent.opacity(0.5), radius: 10, y: 2)
+            }
+            .buttonStyle(.plain)
+            transportButton("forward.end.fill", size: 13) { store.seek(to: store.total) }
+
+            Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 20)
+
+            Text(VirtualTime.fmt(store.playhead))
+                .foregroundColor(Theme.text)
+            + Text("  /  \(VirtualTime.fmt(store.total))")
+                .foregroundColor(Theme.textFaint)
+        }
+        .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+        .monospacedDigit()
+        .padding(.horizontal, 16).padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 18, y: 6)
     }
 
     private var emptyState: some View {
@@ -77,10 +107,10 @@ struct ContentView: View {
         .background(Theme.bgWindow)
     }
 
-    private func transportButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    private func transportButton(_ symbol: String, size: CGFloat = 14, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 14))
-                .foregroundColor(Theme.textDim).frame(width: 32, height: 32)
+            Image(systemName: symbol).font(.system(size: size))
+                .foregroundColor(Theme.textDim).frame(width: 30, height: 30)
         }
         .buttonStyle(.plain)
     }

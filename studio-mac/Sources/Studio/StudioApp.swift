@@ -23,10 +23,11 @@ struct StudioApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
-                .frame(minWidth: 960, minHeight: 620)
+                .frame(minWidth: 1000, minHeight: 640)
                 .background(Theme.bgWindow)
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1320, height: 820)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Open EDL…") { openPanel() }
