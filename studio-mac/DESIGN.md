@@ -76,14 +76,15 @@ source time appears only inside the slice editor.
 
 ## Core logic
 
-**Virtual-cut playback** (no rendering): one `<video>` element per source file
-(created once, `convertFileSrc(abs_path)`), absolutely stacked; only the active
-segment's video is visible. An rAF loop drives an output-time clock:
-`outputTime → find segment via prefix sums → sourceTime = seg.start + (outputTime - segOffset)`.
-On segment entry: show that source's element, `currentTime = sourceTime`, `play()`.
-Pre-seek the *next* segment's element 300ms before the boundary for a clean handoff
-(two elements on the same source: keep one primary; small gap/jump is acceptable v1).
-Pause at end. Scrub = seek by output time.
+**Virtual-cut playback via AVFoundation** (no rendering): the EDL's ranges become one
+gapless `AVMutableComposition` (`Composition.swift`) — each source segment `insertTimeRange`'d
+back-to-back onto shared video/audio tracks, handed to a single `AVPlayer`. Frame-accurate,
+hardware-decoded, gapless, handles 4K. A per-segment `AVVideoComposition` applies each source's
+orientation/scale so mixed-resolution / portrait sources render correctly. Output time ==
+composition time, so `outputTime → segment via prefix sums → sourceTime = seg.start + (outputTime - segOffset)`
+is used only for the timeline/inspector, not playback. Scrub = precise seek (zero tolerance) by
+output time. Note: first playback of large 4K sources on slow/external storage may briefly buffer
+before settling to real-time; warm playback is exactly 1×.
 
 **Word snapping**: build per-source sorted word-boundary arrays from transcripts
 (all `words[].start` and `.end`). Edge drags snap to the nearest boundary
@@ -100,14 +101,56 @@ Undo/redo = in-memory stack of EDL snapshots (also written through on undo).
 `--preview` variant behind alt-click. Requires `video-use` on PATH — show a hint
 if spawn fails.
 
-**Open project**: CLI arg (`studio <path-to-edl.json>`), file-open dialog, or
-drag-drop. Remember last project in localStorage.
+**Open project**: CLI arg (`video-use Studio.app --args <path-to-edl.json>`) or ⌘O file dialog.
+
+## Live subtitles (generated in-app, not from master.srt)
+
+Captions are generated live from `transcripts/*.json` + the current ranges — a faithful port of
+render.py `build_master_srt` (`Subtitles.swift`), so they stay correct as slices are trimmed and
+match the exported burn-in. Never read `master.srt` (it goes stale the moment a cut changes).
+
+Algorithm per range: take transcript words of `type == "word"` overlapping `[start, end)`; group
+into `chunk_words`-word chunks, breaking early when a word ends in `.,!?;:`; caption output time =
+`word.start - range.start + range_output_offset`; collapse whitespace, strip trailing `,;:`, then
+uppercase (if enabled). Drawn as a SwiftUI overlay on the preview (centered, white bold + black
+outline), positioned by `margin_v`; `size`/`margin_v` are expressed in the export's 1080p space and
+scaled to the on-screen video rect. Updates with the playhead (playing **and** scrubbing).
+
+Style controls live in the project inspector panel (show/hide, uppercase, words-per-line 1/2/3,
+size, bottom margin) and persist to a **top-level `subtitle_style`** object that render.py honors
+at export (exact key names):
+
+```json
+"subtitle_style": {"enabled": true, "size": 18, "margin_v": 35, "uppercase": true, "chunk_words": 2}
+```
+
+Absent → loaded with those defaults. On change: atomic-write `edl.json` + append
+`{"op": "subtitle_style", ...}` to `edit_log.jsonl` (slider drags commit once on release).
+
+## Timeline zoom / pan
+
+Default zoom fits the whole duration to width (no clipping). Pinch (or the +/−/fit controls)
+zooms in; center-anchored. When zoomed in: **hover-edge panning** — the pointer within ~80px of
+the left/right edge pans continuously, speed scaling with edge depth — and **auto-follow** keeps
+the playhead in a comfortable band during playback/scrub.
+
+## Inspector follows playback
+
+While playing, the slice editor tracks the slice under the playhead (auto-selects as boundaries
+cross). Manual clicks still select; scrubbing while paused also selects the slice under the playhead.
+
+## Files pane (toggle in the title bar)
+
+A left sidebar listing every video file in the videos dir (edit/'s parent; same discovery as the
+pipeline: extensions `.mp4/.mov/.mkv/.avi/.m4v`, skip dotfiles/`._` AppleDouble). Per row: filename,
+duration (`AVURLAsset` async, cached), and a full-width source-timeline strip with amber blocks
+marking exactly which ranges the cut keeps (position/width proportional to source time). Unused
+files are dimmed. Clicking a kept segment selects that slice and seeks the output playhead to it.
 
 ## Out of scope (v1)
 
-Waveforms/filmstrips in the timeline (needs ffmpeg extraction cache — v2),
-subtitle style editing, grade editing beyond preset dropdown, speed ramps,
-multi-EDL tabs, Windows/Linux titlebar styling.
+Waveforms/filmstrips in the timeline (needs ffmpeg extraction cache — v2), reorder via drag-drop,
+grade editing beyond preset dropdown, speed ramps, multi-EDL tabs, Windows/Linux titlebar styling.
 
 ## Remote control (agents drive the UI)
 
@@ -115,7 +158,7 @@ The app serves `127.0.0.1:4860` (Sources/Studio/ControlServer.swift):
 
 ```
 GET  /state                  → {"edlPath", "slices", "selection", "playing", "playhead"}
-POST /cmd '{"op": ...}'      → forwarded to the webview
+POST /cmd '{"op": ...}'      → dispatched to the app on the main thread
 ```
 
 Ops: `open{path}` · `toggle` / `play` / `pause` · `seek{t}` · `select{i}` (null clears)
@@ -123,9 +166,9 @@ Ops: `open{path}` · `toggle` / `play` / `pause` · `seek{t}` · `select{i}` (nu
 
 Example:
 ```bash
-curl -s -X POST localhost:4859/cmd -d '{"op":"open","path":"/path/to/edit/edl.json"}'
-curl -s -X POST localhost:4859/cmd -d '{"op":"seek","t":12.4}'
-curl -s localhost:4859/state
+curl -s -X POST localhost:4860/cmd -d '{"op":"open","path":"/path/to/edit/edl.json"}'
+curl -s -X POST localhost:4860/cmd -d '{"op":"seek","t":12.4}'
+curl -s localhost:4860/state
 ```
 
 `studio <path/to/edl.json>` as a CLI arg opens that project at launch.

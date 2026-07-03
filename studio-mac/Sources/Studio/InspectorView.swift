@@ -53,12 +53,85 @@ struct InspectorView: View {
                 }
             }
 
+            Divider().background(Theme.border)
+
+            subtitleControls
+
             if store.edl.ranges.isEmpty {
                 Text("Select a clip in the timeline to edit it.")
                     .font(.system(size: 12))
                     .foregroundColor(Theme.textFaint)
                     .padding(.top, 8)
             }
+        }
+    }
+
+    // MARK: subtitle style controls
+
+    private var subtitleControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionHeader("SUBTITLES")
+                Spacer()
+                Toggle("", isOn: styleBinding(\.enabled)).labelsHidden()
+                    .toggleStyle(.switch).controlSize(.mini).tint(Theme.accent)
+            }
+
+            if store.subtitleStyle.enabled {
+                HStack {
+                    Text("Uppercase").font(.system(size: 12)).foregroundColor(Theme.textDim)
+                    Spacer()
+                    Toggle("", isOn: styleBinding(\.uppercase)).labelsHidden()
+                        .toggleStyle(.switch).controlSize(.mini).tint(Theme.accent)
+                }
+                HStack {
+                    Text("Words / line").font(.system(size: 12)).foregroundColor(Theme.textDim)
+                    Spacer()
+                    Picker("", selection: chunkBinding) {
+                        Text("1").tag(1); Text("2").tag(2); Text("3").tag(3)
+                    }
+                    .pickerStyle(.segmented).labelsHidden().frame(width: 108)
+                }
+                sliderRow("Size", keyPath: \.size, range: 10...48, suffix: "")
+                sliderRow("Bottom margin", keyPath: \.margin_v, range: 0...200, suffix: "")
+            } else {
+                Text("Captions hidden. Enable to preview and export burn-in.")
+                    .font(.system(size: 11)).foregroundColor(Theme.textFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Discrete control binding (toggle) — commits immediately (persist + log).
+    private func styleBinding(_ kp: WritableKeyPath<SubtitleStyle, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { store.subtitleStyle[keyPath: kp] },
+            set: { var s = store.subtitleStyle; s[keyPath: kp] = $0; store.updateSubtitleStyle(s, commit: true) })
+    }
+
+    private var chunkBinding: Binding<Int> {
+        Binding(
+            get: { store.subtitleStyle.chunk_words },
+            set: { var s = store.subtitleStyle; s.chunk_words = $0; store.updateSubtitleStyle(s, commit: true) })
+    }
+
+    /// Slider with a live in-memory preview during drag and a single commit (persist + log) on release.
+    private func sliderRow(_ label: String, keyPath kp: WritableKeyPath<SubtitleStyle, Double>,
+                           range: ClosedRange<Double>, suffix: String) -> some View {
+        let live = Binding<Double>(
+            get: { store.subtitleStyle[keyPath: kp] },
+            set: { var s = store.subtitleStyle; s[keyPath: kp] = $0; store.updateSubtitleStyle(s, commit: false) })
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(label).font(.system(size: 12)).foregroundColor(Theme.textDim)
+                Spacer()
+                Text(String(format: "%.0f%@", store.subtitleStyle[keyPath: kp], suffix))
+                    .font(.system(size: 11, design: .monospaced)).foregroundColor(Theme.text)
+            }
+            Slider(value: live, in: range, onEditingChanged: { editing in
+                if !editing { store.updateSubtitleStyle(store.subtitleStyle, commit: true) }
+            })
+            .tint(Theme.accent)
         }
     }
 

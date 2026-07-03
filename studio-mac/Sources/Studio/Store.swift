@@ -25,6 +25,16 @@ final class Store: ObservableObject {
     @Published var playhead: Double = 0
     @Published var agentSynced = false          // flashes when an external write is picked up
     @Published var loadError: String?
+    @Published var renderAspect: Double = 16.0 / 9.0
+
+    // Subtitles (live, generated from transcripts + ranges)
+    @Published var subtitleStyle = SubtitleStyle.default
+    @Published var cues: [Cue] = []
+
+    // Files pane
+    @Published var showFiles = false
+    @Published var videoFiles: [VideoFile] = []
+    @Published var fileDurations: [String: Double] = [:]
 
     // Export sheet
     @Published var exportRunning = false
@@ -47,6 +57,10 @@ final class Store: ObservableObject {
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self else { return }
             self.playhead = max(0, min(time.seconds.isFinite ? time.seconds : 0, self.total))
+            // Inspector follows playback: track the slice under the playhead while playing.
+            if self.playing, let seg = VirtualTime.segmentAtOutput(self.offsets, self.playhead), seg != self.selection {
+                self.selection = seg
+            }
         }
         statusObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
             DispatchQueue.main.async { self?.playing = (p.timeControlStatus == .playing) }
@@ -84,7 +98,9 @@ final class Store: ObservableObject {
             undoStack.removeAll(); redoStack.removeAll()
             selection = nil
             lastWrittenJSON = nil
+            subtitleStyle = p.edl.subtitle_style ?? .default
             rebuild(preservePlayhead: false)
+            discoverFiles()
             watcher?.stop()
             watcher = FileWatcher(path: path) { [weak self] in
                 DispatchQueue.main.async { self?.externalChange() }
@@ -109,6 +125,7 @@ final class Store: ObservableObject {
         if fresh == edl { return }
         let keep = playhead
         edl = fresh
+        subtitleStyle = fresh.subtitle_style ?? .default
         rebuild(preservePlayhead: true)
         seek(to: min(keep, total))
         flashSynced()
@@ -129,6 +146,10 @@ final class Store: ObservableObject {
         offsets = result.offsets
         total = result.total
         sourceDurations = result.sourceDurations
+        if result.renderSize.width > 0, result.renderSize.height > 0 {
+            renderAspect = result.renderSize.width / result.renderSize.height
+        }
+        refreshCues()
 
         let item = AVPlayerItem(asset: result.composition)
         item.videoComposition = result.videoComposition
@@ -158,6 +179,8 @@ final class Store: ObservableObject {
         let time = CMTime(seconds: clamped, preferredTimescale: 600)
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         playhead = clamped
+        // Scrubbing (incl. ruler clicks) tracks the slice under the playhead.
+        selection = VirtualTime.segmentAtOutput(offsets, clamped)
     }
 
     /// Seek to the output-time start of a segment.
@@ -168,6 +191,79 @@ final class Store: ObservableObject {
 
     func select(_ i: Int?) {
         if let i, i >= 0, i < edl.ranges.count { selection = i } else { selection = nil }
+    }
+
+    // MARK: - Subtitles
+
+    func refreshCues() {
+        cues = SubtitleEngine.build(ranges: edl.ranges, transcripts: transcripts, style: subtitleStyle)
+    }
+
+    var currentCaption: String? {
+        guard subtitleStyle.enabled else { return nil }
+        return SubtitleEngine.active(cues, at: playhead)
+    }
+
+    /// Update the live subtitle style. `commit` persists to edl.json + edit_log; slider drags
+    /// pass commit:false while dragging and commit:true on release.
+    func updateSubtitleStyle(_ new: SubtitleStyle, commit: Bool) {
+        subtitleStyle = new
+        refreshCues()
+        guard commit else { return }
+        edl.subtitle_style = new
+        persist()
+        if let dir {
+            Project.appendLog(dir: dir, op: "subtitle_style", fields: [
+                "enabled": new.enabled,
+                "size": new.size,
+                "margin_v": new.margin_v,
+                "uppercase": new.uppercase,
+                "chunk_words": new.chunk_words,
+            ])
+        }
+    }
+
+    // MARK: - Files pane
+
+    private static let videoExts: Set<String> = ["mp4", "mov", "mkv", "avi", "m4v"]
+
+    /// Discover every video file in the videos dir (edit/'s parent), same rules as the pipeline:
+    /// known video extensions, skip dotfiles and ._AppleDouble sidecars.
+    func discoverFiles() {
+        guard let dir else { videoFiles = []; return }
+        let videosDir = Project.basename(dir) == "edit" ? Project.dirname(dir) : dir
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: videosDir)) ?? []
+        let files = names
+            .filter { !$0.hasPrefix(".") && Store.videoExts.contains(($0 as NSString).pathExtension.lowercased()) }
+            .sorted()
+            .map { VideoFile(path: "\(videosDir)/\($0)", name: $0) }
+        videoFiles = files
+        loadFileDurations(files)
+    }
+
+    private func loadFileDurations(_ files: [VideoFile]) {
+        for f in files where fileDurations[f.path] == nil {
+            let asset = AVURLAsset(url: URL(fileURLWithPath: f.path))
+            Task { [weak self] in
+                guard let d = try? await asset.load(.duration) else { return }
+                let secs = d.seconds
+                guard secs.isFinite, secs > 0 else { return }
+                await MainActor.run { self?.fileDurations[f.path] = secs }
+            }
+        }
+    }
+
+    /// Ranges (by index) whose resolved source path is this file — drives the file's timeline strip.
+    func ranges(forFile path: String) -> [(index: Int, range: Range)] {
+        let target = (path as NSString).standardizingPath
+        var out: [(Int, Range)] = []
+        for (i, r) in edl.ranges.enumerated() {
+            if let sp = sourcePaths[r.source], (sp as NSString).standardizingPath == target {
+                out.append((i, r))
+            }
+        }
+        return out
     }
 
     // MARK: - Edits

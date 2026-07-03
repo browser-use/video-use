@@ -15,6 +15,7 @@ struct CompositionResult {
     let offsets: [Double]            // prefix sums, count = ranges.count + 1
     let total: Double
     let sourceDurations: [String: Double]
+    let renderSize: CGSize
 }
 
 enum CompositionBuilder {
@@ -103,7 +104,8 @@ enum CompositionBuilder {
             videoComposition: videoComposition,
             offsets: offsets,
             total: offsets.last ?? 0,
-            sourceDurations: sourceDurations
+            sourceDurations: sourceDurations,
+            renderSize: renderSize
         )
     }
 

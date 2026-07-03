@@ -8,6 +8,7 @@ struct ContentView: View {
             TitleBar()
             Divider().background(Theme.border)
             HStack(spacing: 0) {
+                if store.showFiles { FilesPane().transition(.move(edge: .leading)) }
                 VStack(spacing: 0) {
                     canvas
                     transport
@@ -28,7 +29,12 @@ struct ContentView: View {
                 emptyState
             } else {
                 PlayerView(player: store.player)
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .aspectRatio(store.renderAspect, contentMode: .fit)
+                    .overlay {
+                        if let caption = store.currentCaption {
+                            SubtitleOverlay(text: caption, style: store.subtitleStyle)
+                        }
+                    }
                     .padding(24)
                     .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
             }
@@ -84,6 +90,16 @@ struct TitleBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { store.showFiles.toggle() }
+            } label: {
+                Image(systemName: "sidebar.left").font(.system(size: 13))
+                    .foregroundColor(store.showFiles ? Theme.accent : Theme.textDim)
+                    .frame(width: 26, height: 26)
+            }
+            .buttonStyle(.plain)
+            .help("Toggle source files")
+
             Text(store.dir.map { Project.projectName(dir: $0) } ?? "video-use Studio")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(Theme.text)

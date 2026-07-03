@@ -126,6 +126,32 @@ extension Overlay: Codable {
     }
 }
 
+/// Live subtitle style. Persisted as top-level "subtitle_style"; render.py honors the same
+/// object at export, so these key names (enabled/size/margin_v/uppercase/chunk_words) are load-bearing.
+struct SubtitleStyle: Equatable {
+    var enabled: Bool
+    var size: Double
+    var margin_v: Double
+    var uppercase: Bool
+    var chunk_words: Int
+
+    static let `default` = SubtitleStyle(enabled: true, size: 18, margin_v: 35, uppercase: true, chunk_words: 2)
+}
+
+extension SubtitleStyle: Codable {
+    enum CodingKeys: String, CodingKey { case enabled, size, margin_v, uppercase, chunk_words }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = SubtitleStyle.default
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
+        size = try c.decodeIfPresent(Double.self, forKey: .size) ?? d.size
+        margin_v = try c.decodeIfPresent(Double.self, forKey: .margin_v) ?? d.margin_v
+        uppercase = try c.decodeIfPresent(Bool.self, forKey: .uppercase) ?? d.uppercase
+        chunk_words = try c.decodeIfPresent(Int.self, forKey: .chunk_words) ?? d.chunk_words
+    }
+}
+
 struct Edl: Equatable {
     var version: Int
     var sources: [String: String]
@@ -133,12 +159,13 @@ struct Edl: Equatable {
     var grade: String?
     var overlays: [Overlay]?
     var subtitles: String?
+    var subtitle_style: SubtitleStyle?
     var total_duration_s: Double?
     var extra: [String: JSONValue] = [:]
 }
 
 extension Edl: Codable {
-    private static let known: Set<String> = ["version", "sources", "ranges", "grade", "overlays", "subtitles", "total_duration_s"]
+    private static let known: Set<String> = ["version", "sources", "ranges", "grade", "overlays", "subtitles", "subtitle_style", "total_duration_s"]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: DynamicKey.self)
@@ -148,6 +175,7 @@ extension Edl: Codable {
         grade = try c.decodeIfPresent(String.self, forKey: DynamicKey("grade"))
         overlays = try c.decodeIfPresent([Overlay].self, forKey: DynamicKey("overlays"))
         subtitles = try c.decodeIfPresent(String.self, forKey: DynamicKey("subtitles"))
+        subtitle_style = try c.decodeIfPresent(SubtitleStyle.self, forKey: DynamicKey("subtitle_style"))
         total_duration_s = try c.decodeIfPresent(Double.self, forKey: DynamicKey("total_duration_s"))
         extra = try decodeExtra(c, known: Self.known)
     }
@@ -160,6 +188,7 @@ extension Edl: Codable {
         try c.encodeIfPresent(grade, forKey: DynamicKey("grade"))
         try c.encodeIfPresent(overlays, forKey: DynamicKey("overlays"))
         try c.encodeIfPresent(subtitles, forKey: DynamicKey("subtitles"))
+        try c.encodeIfPresent(subtitle_style, forKey: DynamicKey("subtitle_style"))
         try c.encodeIfPresent(total_duration_s, forKey: DynamicKey("total_duration_s"))
         try encodeExtra(extra, into: &c)
     }
