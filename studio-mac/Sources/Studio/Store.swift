@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import Combine
 import Foundation
@@ -38,8 +39,15 @@ final class Store: ObservableObject {
 
     // Export sheet
     @Published var exportRunning = false
-    @Published var exportOutput = ""
+    @Published var exportOutput = ""          // full raw log (behind "Show log")
     @Published var showExport = false
+    @Published var exportStage = ""           // current pipeline stage, human-readable
+    @Published var exportSucceeded: Bool?     // nil while running
+    @Published var exportOutPath: String?
+    @Published var exportSizeMB: Double?
+    @Published var exportDuration: Double?
+    @Published var exportError: String?
+    private var exportProcess: Process?
 
     let player = AVPlayer()
     var sourceDurations: [String: Double] = [:]
@@ -65,7 +73,14 @@ final class Store: ObservableObject {
         statusObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
             DispatchQueue.main.async { self?.playing = (p.timeControlStatus == .playing) }
         }
+        // Track when the window becomes key so we can swallow a control click that lands
+        // purely from window activation (see updateSubtitleStyle).
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.lastBecameActive = Date() }
     }
+
+    private var lastBecameActive = Date.distantPast
 
     // MARK: - Bootstrap
 
@@ -204,12 +219,24 @@ final class Store: ObservableObject {
         return SubtitleEngine.active(cues, at: playhead)
     }
 
-    /// Update the live subtitle style. `commit` persists to edl.json + edit_log; slider drags
-    /// pass commit:false while dragging and commit:true on release.
+    /// Update the live subtitle style. `commit` persists to edl.json + edit_log and is undoable;
+    /// slider drags pass commit:false while dragging and commit:true on release.
     func updateSubtitleStyle(_ new: SubtitleStyle, commit: Bool) {
         subtitleStyle = new
         refreshCues()
         guard commit else { return }
+
+        // Swallow a commit that lands within the window-activation grace window: the first click
+        // on an inactive window (delivered to a control purely to focus it) shouldn't nudge +
+        // persist the style. Revert the live preview too.
+        if Date().timeIntervalSince(lastBecameActive) < 0.35 {
+            subtitleStyle = edl.subtitle_style ?? .default
+            refreshCues()
+            return
+        }
+
+        undoStack.append(edl)          // undoable: snapshot the pre-change EDL
+        redoStack.removeAll()
         edl.subtitle_style = new
         persist()
         if let dir {
@@ -342,6 +369,7 @@ final class Store: ObservableObject {
         redoStack.append(edl)
         edl = prev
         selection = nil
+        subtitleStyle = prev.subtitle_style ?? .default
         persist()
         rebuild(preservePlayhead: true)
     }
@@ -351,6 +379,7 @@ final class Store: ObservableObject {
         undoStack.append(edl)
         edl = next
         selection = nil
+        subtitleStyle = next.subtitle_style ?? .default
         persist()
         rebuild(preservePlayhead: true)
     }
@@ -364,12 +393,20 @@ final class Store: ObservableObject {
         guard let path = edlPath, let dir, !exportRunning else { return }
         let out = "\(dir)/\(preview ? "preview.mp4" : "final.mp4")"
         exportRunning = true
-        exportOutput = "$ video-use render \(path) -o \(out)\(preview ? " --preview" : "")\n"
+        exportSucceeded = nil
+        exportOutput = ""
+        exportStage = "Starting…"
+        exportError = nil
+        exportSizeMB = nil
+        exportDuration = nil
+        exportOutPath = out
         showExport = true
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        var args = ["video-use", "render", path, "-o", out]
+        // Always rebuild subtitles so trimmed cuts don't reuse a stale master.srt.
+        // render honors subtitle_style (enabled=false → no subtitles).
+        var args = ["video-use", "render", path, "-o", out, "--build-subtitles"]
         if preview { args.append("--preview") }
         task.arguments = args
         var env = ProcessInfo.processInfo.environment
@@ -384,18 +421,54 @@ final class Store: ObservableObject {
         pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let d = h.availableData
             guard !d.isEmpty, let s = String(data: d, encoding: .utf8) else { return }
-            DispatchQueue.main.async { self?.exportOutput += s }
+            DispatchQueue.main.async { self?.ingestExportOutput(s) }
         }
         task.terminationHandler = { [weak self] proc in
             pipe.fileHandleForReading.readabilityHandler = nil
-            DispatchQueue.main.async {
-                self?.exportOutput += "\n[exit \(proc.terminationStatus)]\n"
-                self?.exportRunning = false
-            }
+            DispatchQueue.main.async { self?.finishExport(status: proc.terminationStatus, out: out) }
         }
+        exportProcess = task
         do { try task.run() } catch {
-            exportOutput += "\nFailed to launch video-use: \(error.localizedDescription)\nIs it on PATH?\n"
             exportRunning = false
+            exportSucceeded = false
+            exportStage = "Failed"
+            exportError = "Could not launch video-use — is it on your PATH?"
+            exportOutput += "\(error.localizedDescription)\n"
+        }
+    }
+
+    func cancelExport() {
+        exportProcess?.terminate()
+    }
+
+    private func ingestExportOutput(_ chunk: String) {
+        exportOutput += chunk
+        for raw in chunk.split(whereSeparator: \.isNewline) {
+            let line = String(raw)
+            if let stage = ExportStages.label(for: line) { exportStage = stage }
+            if ExportStages.isErrorLine(line) { exportError = line.trimmingCharacters(in: .whitespaces) }
+        }
+    }
+
+    private func finishExport(status: Int32, out: String) {
+        exportRunning = false
+        exportProcess = nil
+        if status == 0 {
+            exportSucceeded = true
+            exportStage = "Done"
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: out),
+               let n = attrs[.size] as? NSNumber {
+                exportSizeMB = n.doubleValue / 1_000_000
+            }
+            let asset = AVURLAsset(url: URL(fileURLWithPath: out))
+            Task { [weak self] in
+                guard let d = try? await asset.load(.duration) else { return }
+                await MainActor.run { self?.exportDuration = d.seconds }
+            }
+        } else {
+            exportSucceeded = false
+            exportStage = "Failed"
+            if exportError == nil { exportError = "Export failed (exit \(status))." }
         }
     }
 

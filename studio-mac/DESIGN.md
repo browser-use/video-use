@@ -96,10 +96,19 @@ drag-drop of whole blocks, select→inspector. Every commit: recompute
 `total_duration_s`, atomic-write `edl.json`, append `edit_log.jsonl`.
 Undo/redo = in-memory stack of EDL snapshots (also written through on undo).
 
-**Export**: shell-execute `video-use render <edl> -o <edit_dir>/final.mp4`
-(plugin-shell, already permitted); stream stdout lines into a progress overlay;
-`--preview` variant behind alt-click. Requires `video-use` on PATH — show a hint
-if spawn fails.
+**Export**: run `video-use render <edl> -o <edit_dir>/final.mp4 --build-subtitles`
+(`--preview` variant for 720p). **`--build-subtitles` is always passed** so a trimmed cut
+never reuses a stale `master.srt`; render regenerates it from transcripts + current offsets and
+honors `subtitle_style` (`enabled:false` → no subtitles). Requires `video-use` on PATH.
+
+The export sheet is a proper flow, not a raw log dump:
+- **Running** — indeterminate indigo progress bar + a single status line naming the current
+  pipeline stage (parsed from render stdout: Extracting segments → Concatenating clips →
+  Building subtitles → Compositing overlays & subtitles → Normalizing loudness), a collapsed
+  "Show log" disclosure, and Cancel.
+- **Success** — a clean card: output filename, size, duration, [Reveal in Finder] · [Done]. No log.
+- **Failure** — the error line prominent + the log expanded.
+The `$ video-use render …` echo and `[exit 0]` are gone from the default view.
 
 **Open project**: CLI arg (`video-use Studio.app --args <path-to-edl.json>`) or ⌘O file dialog.
 
