@@ -148,8 +148,14 @@ def is_portrait_source(video: Path) -> bool:
 
 
 def parse_fps(value: str) -> str:
-    """Validate an ffmpeg frame rate while preserving its original spelling."""
+    """Validate and canonicalize an ffmpeg frame rate."""
     text = value.strip()
+    if len(text) > 32 or not re.fullmatch(
+        r"(?:[0-9]+(?:\.[0-9]+)?|[0-9]+/[0-9]+)", text
+    ):
+        raise argparse.ArgumentTypeError(
+            "FPS must be a positive number or rational, e.g. 30 or 30000/1001"
+        )
     try:
         rate = Fraction(text)
     except (ValueError, ZeroDivisionError) as exc:
@@ -158,7 +164,7 @@ def parse_fps(value: str) -> str:
         ) from exc
     if rate <= 0:
         raise argparse.ArgumentTypeError("FPS must be greater than zero")
-    return text
+    return f"{rate.numerator}/{rate.denominator}"
 
 
 def probe_source_fps(video: Path) -> str | None:
@@ -166,8 +172,8 @@ def probe_source_fps(video: Path) -> str | None:
 
     ``avg_frame_rate`` represents the observed average and is the better default
     for variable-frame-rate inputs. ``r_frame_rate`` remains a fallback for
-    streams where the average is unavailable. Values are returned verbatim so
-    rates such as ``30000/1001`` survive without rounding.
+    streams where the average is unavailable. Values are normalized to an exact
+    rational so rates such as ``30000/1001`` survive without rounding.
     """
     try:
         out = subprocess.run(
