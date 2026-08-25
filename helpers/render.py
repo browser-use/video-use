@@ -164,6 +164,12 @@ def parse_fps(value: str) -> str:
         ) from exc
     if rate <= 0:
         raise argparse.ArgumentTypeError("FPS must be greater than zero")
+    # FFmpeg stores video rates as AVRational (signed 32-bit components).
+    # Bounding the reduced fraction keeps every accepted canonical value safe
+    # for ffmpeg and makes parse_fps(parse_fps(value)) idempotent.
+    max_component = 2_147_483_647
+    if rate.numerator > max_component or rate.denominator > max_component:
+        raise argparse.ArgumentTypeError("FPS precision or magnitude is too large")
     return f"{rate.numerator}/{rate.denominator}"
 
 

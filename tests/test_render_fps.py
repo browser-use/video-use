@@ -28,6 +28,12 @@ class ParseFpsTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(render.parse_fps(value), canonical)
 
+    def test_canonical_rates_are_idempotent(self):
+        for value in ("60", "29.97", "30000/1001"):
+            with self.subTest(value=value):
+                canonical = render.parse_fps(value)
+                self.assertEqual(render.parse_fps(canonical), canonical)
+
     def test_rejects_invalid_or_non_positive_rates(self):
         for value in (
             "",
@@ -37,6 +43,7 @@ class ParseFpsTests(unittest.TestCase):
             "1/0",
             "1e3",
             "1_000",
+            "0.12345678901234567890",
             "1" * 33,
         ):
             with self.subTest(value=value):
