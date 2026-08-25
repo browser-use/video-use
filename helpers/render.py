@@ -137,7 +137,7 @@ def is_portrait_source(video: Path) -> bool:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries",
-             "stream=width,height:stream_tags=rotate:stream_side_data=rotation",
+             "stream=width,height:stream_side_data=rotation",
              "-of", "json", str(video)],
             capture_output=True, text=True, check=True,
         )
@@ -147,17 +147,15 @@ def is_portrait_source(video: Path) -> bool:
         stream = streams[0]
         w, h = int(stream["width"]), int(stream["height"])
 
-        # Modern containers expose rotation through display-matrix side data;
-        # older files may use a legacy `rotate` stream tag. ffmpeg autorotates
-        # before applying filters, so swap the coded dimensions for quarter-turns
-        # to choose the scale axis from the dimensions the filter actually sees.
-        rotation = None
+        # ffmpeg autorotates display-matrix side data before applying filters.
+        # Swap coded dimensions for quarter-turns so the scale axis is selected
+        # from the dimensions the filter actually sees. A plain metadata tag is
+        # intentionally ignored because it does not guarantee autorotation.
+        rotation = 0
         for side_data in stream.get("side_data_list") or []:
             if side_data.get("rotation") is not None:
                 rotation = side_data["rotation"]
                 break
-        if rotation is None:
-            rotation = (stream.get("tags") or {}).get("rotate", 0)
         if int(round(float(rotation))) % 360 in (90, 270):
             w, h = h, w
         return h > w

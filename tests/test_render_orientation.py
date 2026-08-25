@@ -18,8 +18,13 @@ class PortraitDetectionTests(unittest.TestCase):
         result = subprocess.CompletedProcess(
             [], 0, stdout=json.dumps({"streams": [stream]}), stderr=""
         )
-        with patch.object(render.subprocess, "run", return_value=result):
-            return render.is_portrait_source(Path("source.mp4"))
+        with patch.object(render.subprocess, "run", return_value=result) as run:
+            portrait = render.is_portrait_source(Path("source.mp4"))
+        cmd = run.call_args.args[0]
+        show_entries = cmd[cmd.index("-show_entries") + 1]
+        self.assertIn("stream_side_data=rotation", show_entries)
+        self.assertNotIn("stream_tags=rotate", show_entries)
+        return portrait
 
     def test_native_portrait_dimensions(self):
         self.assertTrue(self._is_portrait({"width": 1080, "height": 1920}))
@@ -35,9 +40,9 @@ class PortraitDetectionTests(unittest.TestCase):
         }
         self.assertTrue(self._is_portrait(stream))
 
-    def test_legacy_rotation_tag_is_supported(self):
+    def test_plain_rotation_tag_without_side_data_is_ignored(self):
         stream = {"width": 1920, "height": 1080, "tags": {"rotate": "270"}}
-        self.assertTrue(self._is_portrait(stream))
+        self.assertFalse(self._is_portrait(stream))
 
     def test_rotation_can_turn_coded_portrait_into_landscape(self):
         stream = {
