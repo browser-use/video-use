@@ -1,0 +1,25 @@
+studio-mac/Sources/Studio/Composition.swift
+  s_c2537cc055ee10::t_dfb82f0e89b672 11-15,29-37,42-57,60-61,63-64,69,74-75,85,87-91,93,104-115,125-126,145-146
+.gitignore
+  s_c2537cc055ee10::t_57bea71d269163 61-65
+studio-mac/Sources/Studio/Store.swift
+  s_c2537cc055ee10::t_dfb82f0e89b672 107-108,110-136,148-160,172-176,179-180,182-206
+studio-mac/Sources/Studio/Subtitles.swift
+  s_c2537cc055ee10::t_dfb82f0e89b672 59-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "56f64b36ef1396091ce50a6813a139c212a36f87",
+  "prompts": {},
+  "sessions": {
+    "s_c2537cc055ee10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e83b6344-ddc3-44be-892b-619caa847bd5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Gregor Žunič <36313686+gregpr07@users.noreply.github.com>"
+    }
+  }
+}
