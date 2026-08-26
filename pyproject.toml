@@ -1,23 +1,49 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "video-use"
-version = "0.1.0"
-description = "Conversation-driven video editor skill for Claude Code"
-license = { file = "LICENSE" }
+version = "0.2.0"
+description = "Edit videos with coding agents: transcribe, cut, grade, animate, subtitle — by conversation."
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["agent", "video", "editing", "ffmpeg", "transcription", "claude-code"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+]
 dependencies = [
-    "requests",
-    "librosa",
-    "matplotlib",
-    "pillow",
-    "numpy",
+    "requests>=2.31",
+    "pillow>=10.0",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
 animations = ["manim"]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+[project.scripts]
+video-use = "video_use.run:main"
+
+[project.urls]
+Homepage = "https://github.com/browser-use/video-use"
+Repository = "https://github.com/browser-use/video-use"
+Issues = "https://github.com/browser-use/video-use/issues"
 
 [tool.setuptools]
-py-modules = []
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+video_use = ["SKILL.md", "skills/manim-video/**/*"]
