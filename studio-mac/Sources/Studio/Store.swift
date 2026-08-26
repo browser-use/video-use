@@ -104,51 +104,60 @@ final class Store: ObservableObject {
 
     // MARK: - Loading
 
+    /// Loads the project OFF the main thread — reading edl.json + transcripts on the main thread
+    /// froze the whole UI whenever the external/exFAT drive was busy (e.g. mid 4K render).
     func open(path: String) {
-        do {
-            let p = try Project.load(path)
-            edlPath = p.edlPath
-            dir = p.dir
-            edl = p.edl
-            sourcePaths = p.sourcePaths
-            transcripts = p.transcripts
-            projectMd = p.projectMd
-            loadError = nil
-            undoStack.removeAll(); redoStack.removeAll()
-            selection = nil
-            lastWrittenJSON = nil
-            subtitleStyle = p.edl.subtitle_style ?? .default
-            rebuild(preservePlayhead: false)
-            zoomRegions = []
-            discoverFiles()
-            watcher?.stop()
-            watcher = FileWatcher(path: path) { [weak self] in
-                DispatchQueue.main.async { self?.externalChange() }
+        Task { [weak self] in
+            let loaded: LoadedProject
+            do { loaded = try Project.load(path) }
+            catch {
+                await MainActor.run { self?.loadError = "Could not open \(path): \(error.localizedDescription)" }
+                return
             }
-        } catch {
-            loadError = "Could not open \(path): \(error.localizedDescription)"
+            await MainActor.run {
+                guard let self else { return }
+                self.edlPath = loaded.edlPath
+                self.dir = loaded.dir
+                self.edl = loaded.edl
+                self.sourcePaths = loaded.sourcePaths
+                self.transcripts = loaded.transcripts
+                self.projectMd = loaded.projectMd
+                self.loadError = nil
+                self.undoStack.removeAll(); self.redoStack.removeAll()
+                self.selection = nil
+                self.lastWrittenJSON = nil
+                self.subtitleStyle = loaded.edl.subtitle_style ?? .default
+                self.zoomRegions = []
+                self.rebuild(preservePlayhead: false)
+                self.discoverFiles()
+                self.watcher?.stop()
+                self.watcher = FileWatcher(path: path) { [weak self] in
+                    DispatchQueue.main.async { self?.externalChange() }
+                }
+            }
         }
     }
 
     func reload() {
         guard let path = edlPath else { return }
-        let keep = playhead
         open(path: path)
-        seek(to: keep)
     }
 
     private func externalChange() {
         guard let path = edlPath else { return }
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return }
-        if let last = lastWrittenJSON, last == data { return }   // our own write
-        guard let fresh = try? JSONDecoder().decode(Edl.self, from: data) else { return }
-        if fresh == edl { return }
-        let keep = playhead
-        edl = fresh
-        subtitleStyle = fresh.subtitle_style ?? .default
-        rebuild(preservePlayhead: true)
-        seek(to: min(keep, total))
-        flashSynced()
+        Task { [weak self] in
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let fresh = try? JSONDecoder().decode(Edl.self, from: data) else { return }
+            await MainActor.run {
+                guard let self else { return }
+                if let last = self.lastWrittenJSON, last == data { return }   // our own write
+                if fresh == self.edl { return }
+                self.edl = fresh
+                self.subtitleStyle = fresh.subtitle_style ?? .default
+                self.rebuild(preservePlayhead: true)
+                self.flashSynced()
+            }
+        }
     }
 
     private func flashSynced() {
@@ -160,23 +169,41 @@ final class Store: ObservableObject {
 
     // MARK: - Composition
 
+    private var rebuildGen = 0
+
+    /// Build the AVMutableComposition off the main actor (track loading is async so 4K sources
+    /// off a slow drive can't be dropped), then swap the player item on main. A generation guard
+    /// drops superseded rebuilds if several fire in quick succession (e.g. watcher bursts).
     private func rebuild(preservePlayhead: Bool) {
         let keep = playhead
-        let result = CompositionBuilder.build(edl: edl, sourcePaths: sourcePaths)
-        offsets = result.offsets
-        total = result.total
-        sourceDurations = result.sourceDurations
-        if result.renderSize.width > 0, result.renderSize.height > 0 {
-            renderAspect = result.renderSize.width / result.renderSize.height
-        }
-        refreshCues()
-
-        let item = AVPlayerItem(asset: result.composition)
-        item.videoComposition = result.videoComposition
+        let edlSnapshot = edl
+        let paths = sourcePaths
         let wasPlaying = playing
-        player.replaceCurrentItem(with: item)
-        if preservePlayhead { seek(to: min(keep, total)) } else { playhead = 0 }
-        if wasPlaying && preservePlayhead { player.play() }
+        rebuildGen &+= 1
+        let gen = rebuildGen
+        Task { [weak self] in
+            let result = await CompositionBuilder.build(edl: edlSnapshot, sourcePaths: paths)
+            await MainActor.run {
+                guard let self, gen == self.rebuildGen else { return }
+                self.offsets = result.offsets
+                self.total = result.total
+                self.sourceDurations = result.sourceDurations
+                if result.renderSize.width > 0, result.renderSize.height > 0 {
+                    self.renderAspect = result.renderSize.width / result.renderSize.height
+                }
+                self.refreshCues()
+
+                let item = AVPlayerItem(asset: result.composition)
+                item.videoComposition = result.videoComposition
+                self.player.replaceCurrentItem(with: item)
+                if preservePlayhead {
+                    self.seek(to: min(keep, self.total))
+                } else {
+                    self.playhead = 0
+                }
+                if wasPlaying && preservePlayhead { self.player.play() }
+            }
+        }
     }
 
     // MARK: - Transport

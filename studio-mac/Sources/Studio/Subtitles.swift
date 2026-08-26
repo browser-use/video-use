@@ -56,6 +56,9 @@ enum SubtitleEngine {
                     .joined(separator: " ")
                 text = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
                     .trimmingCharacters(in: .whitespaces)
+                // Scribe puts literal quote marks in reported-speech words ("Hey. / cash."). Strip
+                // straight + curly double quotes (keep apostrophes) to match render.py build_master_srt.
+                for q in ["\"", "\u{201C}", "\u{201D}"] { text = text.replacingOccurrences(of: q, with: "") }
                 // render.py strips only trailing , ; : (keeps . ! ?)
                 while let last = text.last, ",;:".contains(last) { text.removeLast() }
                 if style.uppercase { text = text.uppercased() }

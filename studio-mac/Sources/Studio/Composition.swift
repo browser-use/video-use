@@ -8,6 +8,11 @@ import CoreMedia
 // hardware-decoded, gapless virtual-cut playback (including 4K), no per-source
 // stacked players. A per-segment AVVideoComposition applies each source's
 // orientation/scale so mixed-resolution / portrait sources render correctly.
+//
+// Tracks are loaded ASYNC: the deprecated synchronous asset.tracks() returns [] for
+// 4K assets that haven't finished loading off a slow/external drive, which silently
+// dropped segments and left gaps in the video-composition instructions (AVFoundation
+// needs them to tile the whole timeline) — that froze playback on multi-source cuts.
 
 struct CompositionResult {
     let composition: AVMutableComposition
@@ -21,36 +26,53 @@ struct CompositionResult {
 enum CompositionBuilder {
     private static let ts: CMTimeScale = 600
 
-    static func build(edl: Edl, sourcePaths: [String: String]) -> CompositionResult {
+    private struct Loaded {
+        let video: AVAssetTrack?
+        let audio: AVAssetTrack?
+        let naturalSize: CGSize
+        let transform: CGAffineTransform
+        let duration: Double
+    }
+
+    static func build(edl: Edl, sourcePaths: [String: String]) async -> CompositionResult {
         let comp = AVMutableComposition()
         let vTrack = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         let aTrack = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
 
-        var assets: [String: AVURLAsset] = [:]
-        var sourceDurations: [String: Double] = [:]
-        func asset(for source: String) -> AVURLAsset? {
-            guard let path = sourcePaths[source] else { return nil }
-            if let a = assets[path] { return a }
-            let a = AVURLAsset(url: URL(fileURLWithPath: path))
-            assets[path] = a
-            sourceDurations[source] = a.duration.seconds
-            return a
+        // Preload every unique source's tracks + geometry, reliably, before inserting anything.
+        var loaded: [String: Loaded] = [:]
+        for r in edl.ranges where loaded[r.source] == nil {
+            guard let path = sourcePaths[r.source] else { continue }
+            let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+            let dur = ((try? await asset.load(.duration))?.seconds) ?? 0
+            let vTracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
+            let aTracks = (try? await asset.loadTracks(withMediaType: .audio)) ?? []
+            var natSize = CGSize.zero
+            var transform = CGAffineTransform.identity
+            if let vt = vTracks.first, let g = try? await vt.load(.naturalSize, .preferredTransform) {
+                natSize = g.0
+                transform = g.1
+            }
+            loaded[r.source] = Loaded(video: vTracks.first, audio: aTracks.first,
+                                      naturalSize: natSize, transform: transform, duration: dur)
         }
 
-        // Pass 1: pick a render size from the first oriented video track we can find.
-        var renderSize: CGSize = .zero
+        // Render size from the first source that actually has a video track.
+        var renderSize = CGSize.zero
         for r in edl.ranges {
-            if let a = asset(for: r.source), let vt = a.tracks(withMediaType: .video).first {
-                let o = vt.naturalSize.applying(vt.preferredTransform)
+            if let l = loaded[r.source], l.video != nil, l.naturalSize != .zero {
+                let o = l.naturalSize.applying(l.transform)
                 renderSize = CGSize(width: abs(o.width), height: abs(o.height))
                 break
             }
         }
+        let hasVC = !renderSize.equalTo(.zero)
 
-        // Pass 2: insert each segment back-to-back and build one video instruction per segment.
         var offsets: [Double] = [0]
         var cursor = CMTime.zero
         var instructions: [AVMutableVideoCompositionInstruction] = []
+        var sourceDurations: [String: Double] = [:]
+        for (src, l) in loaded { sourceDurations[src] = l.duration }
 
         for r in edl.ranges {
             let dur = r.duration
@@ -60,16 +82,15 @@ enum CompositionBuilder {
             let segDur = CMTime(seconds: dur, preferredTimescale: ts)
             let srcRange = CMTimeRange(start: CMTime(seconds: r.start, preferredTimescale: ts), duration: segDur)
             let segRange = CMTimeRange(start: cursor, duration: segDur)
+            let l = loaded[r.source]
 
-            let a = asset(for: r.source)
-            let vSrc = a?.tracks(withMediaType: .video).first
-            let aSrc = a?.tracks(withMediaType: .audio).first
-
-            // Video — keep the composition track length aligned even if a segment can't load.
-            if let vSrc, let vTrack, (try? vTrack.insertTimeRange(srcRange, of: vSrc, at: cursor)) != nil {
-                if !renderSize.equalTo(.zero) {
+            var placedVideo = false
+            if let vSrc = l?.video, let vTrack,
+               (try? vTrack.insertTimeRange(srcRange, of: vSrc, at: cursor)) != nil {
+                placedVideo = true
+                if hasVC {
                     let li = AVMutableVideoCompositionLayerInstruction(assetTrack: vTrack)
-                    li.setTransform(fitTransform(track: vSrc, into: renderSize), at: cursor)
+                    li.setTransform(fitTransform(naturalSize: l!.naturalSize, transform: l!.transform, into: renderSize), at: cursor)
                     let inst = AVMutableVideoCompositionInstruction()
                     inst.timeRange = segRange
                     inst.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
@@ -80,8 +101,18 @@ enum CompositionBuilder {
                 vTrack?.insertEmptyTimeRange(segRange)
             }
 
-            // Audio
-            if let aSrc, let aTrack, (try? aTrack.insertTimeRange(srcRange, of: aSrc, at: cursor)) != nil {
+            // Always tile the video composition: a segment with no video still needs a
+            // (black) instruction covering its range, or the whole composition breaks.
+            if hasVC && !placedVideo {
+                let inst = AVMutableVideoCompositionInstruction()
+                inst.timeRange = segRange
+                inst.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
+                inst.layerInstructions = []
+                instructions.append(inst)
+            }
+
+            if let aSrc = l?.audio, let aTrack,
+               (try? aTrack.insertTimeRange(srcRange, of: aSrc, at: cursor)) != nil {
                 // inserted
             } else {
                 aTrack?.insertEmptyTimeRange(segRange)
@@ -91,7 +122,8 @@ enum CompositionBuilder {
         }
 
         var videoComposition: AVMutableVideoComposition?
-        if !renderSize.equalTo(.zero) && !instructions.isEmpty {
+        if hasVC && !instructions.isEmpty {
+            instructions.sort { $0.timeRange.start < $1.timeRange.start }
             let vc = AVMutableVideoComposition()
             vc.renderSize = renderSize
             vc.frameDuration = CMTime(value: 1, timescale: 30)
@@ -110,11 +142,8 @@ enum CompositionBuilder {
     }
 
     /// Orientation + aspect-fit transform mapping a source frame into renderSize, centered.
-    /// preferredTransform is applied first (so rotated sources land upright), then uniform
-    /// scale to fit, then a translate to center any letterbox/pillarbox gap.
-    private static func fitTransform(track: AVAssetTrack, into renderSize: CGSize) -> CGAffineTransform {
-        let pref = track.preferredTransform
-        let oriented = track.naturalSize.applying(pref)
+    private static func fitTransform(naturalSize: CGSize, transform pref: CGAffineTransform, into renderSize: CGSize) -> CGAffineTransform {
+        let oriented = naturalSize.applying(pref)
         let ow = abs(oriented.width), oh = abs(oriented.height)
         guard ow > 0, oh > 0 else { return pref }
         let scale = min(renderSize.width / ow, renderSize.height / oh)
