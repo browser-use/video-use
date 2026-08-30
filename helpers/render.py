@@ -132,8 +132,37 @@ def is_hdr_source(video: Path) -> bool:
         return False
 
 
+def _probe_rotation(video: Path) -> int:
+    """Display rotation in degrees, normalized to a 0/90 orientation-swap flag.
+
+    Returns 90 when the display matrix rotates the picture a quarter turn
+    (±90 / ±270), else 0. 180 keeps orientation, so it maps to 0.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream_side_data=rotation:stream_tags=rotate",
+             "-of", "default=nw=1:nk=1", str(video)],
+            capture_output=True, text=True, check=True,
+        )
+        for line in out.stdout.splitlines():
+            tok = line.strip()
+            if tok.lstrip("-").isdigit():
+                return abs(int(tok)) % 180  # 90 -> swap, 0/180 -> no swap
+        return 0
+    except Exception:
+        return 0
+
+
 def is_portrait_source(video: Path) -> bool:
-    """Return True if the video's height > width (portrait / vertical)."""
+    """Return True if the video DISPLAYS taller than wide (portrait / vertical).
+
+    Accounts for rotation metadata: a phone clip stored 848x480 with rotation
+    ±90 actually displays as 480x848 (portrait). ffmpeg auto-applies the display
+    matrix on decode, so the scale filter must match the DISPLAYED orientation.
+    Comparing only raw width/height misclassifies rotated mobile sources and
+    blows up the output geometry (e.g. 1920x3392 instead of 1080x1920).
+    """
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
@@ -141,7 +170,9 @@ def is_portrait_source(video: Path) -> bool:
              "-of", "csv=p=0", str(video)],
             capture_output=True, text=True, check=True,
         )
-        w, h = map(int, out.stdout.strip().split(","))
+        w, h = map(int, out.stdout.strip().split(",")[:2])
+        if _probe_rotation(video) == 90:
+            w, h = h, w
         return h > w
     except Exception:
         return False
