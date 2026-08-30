@@ -14,6 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 animations = ["manim"]
+dev = ["pytest>=7"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
