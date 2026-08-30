@@ -641,7 +641,17 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        # Forward slashes BEFORE escaping the colon: ffmpeg's filtergraph parser
+        # treats "\" as an escape char, so a Windows path like C:\Users\sam
+        # arrives at the subtitles filter as "C:Userssam" and fails to open.
+        # ffmpeg accepts forward slashes on Windows, and this is a no-op on
+        # POSIX where the path has no backslashes to begin with.
+        subs_abs = (
+            str(subtitles_path.resolve())
+            .replace("\\", "/")
+            .replace(":", r"\:")
+            .replace("'", r"\'")
+        )
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )
