@@ -320,3 +320,6 @@ Things that consistently fail regardless of style:
 - **Editing before confirming the strategy.** Never.
 - **Re-transcribing cached sources.** Immutable outputs of immutable inputs.
 - **Assuming what kind of video it is.** Look first, ask second, edit last.
+- **`zoompan` für statische Outro-Hintergründe.** Ganzzahl-Stepping verursacht sichtbares Ruckeln. Statisches Still verwenden — Bewegung kommt vom GSAP-Veil in HyperFrames.
+- **Overlay-Design ohne vorherige Luminanzmessung.** Nie raten. Immer `ffprobe signalstats` oder `check_luminance.py` vor dem ersten Farbentscheid ausführen. Konsequenz: cremefarbener Text auf hellem Footage (unsichtbar).
+- **Veil-Animation mit `power2.in`.** Startet träge — "langweilig fürs Auge". Immer `power2.out` für den Cream-Veil (sofort merklich hell, dann sanft auslaufen). Dauer 3.5s, nicht 7s.

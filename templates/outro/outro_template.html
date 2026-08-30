@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1080px; height: 1920px;
+        overflow: hidden; background: transparent;
+      }
+
+      /* Filled at render time by make_outro.py via __OUTRO_CONFIG__ */
+      :root {
+        --text-color: #FAF6F0;
+        --text-shadow: 0 2px 30px rgba(44,37,35,0.35), 0 1px 4px rgba(44,37,35,0.25);
+        --veil-color: #FAF6F0;
+        --accent: #C19A83;
+        --kicker-opacity: 0.65;
+        --handle-opacity: 0.60;
+      }
+
+      .veil {
+        position: absolute; inset: 0;
+        background: var(--veil-color);
+        opacity: 0; pointer-events: none;
+      }
+
+      .stage {
+        position: absolute; left: 96px; opacity: 0;
+      }
+      .text-halo { text-shadow: var(--text-shadow); }
+
+      .kicker-row {
+        display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+      }
+      .icon { width: 28px; height: 28px; flex-shrink: 0; }
+      .icon svg { width: 100%; height: 100%; }
+
+      .kicker {
+        font-family: 'Poppins', sans-serif; font-weight: 400;
+        font-size: 30px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: color-mix(in srgb, var(--text-color) calc(var(--kicker-opacity) * 100%), transparent);
+      }
+
+      .hairline {
+        width: 0; height: 1.5px;
+        background: var(--accent); margin-bottom: 20px;
+      }
+
+      .context-line {
+        font-family: 'Cormorant Garamond', serif; font-weight: 500;
+        font-size: 64px; line-height: 1.15; color: var(--text-color);
+      }
+
+      .hero-word {
+        font-family: 'Cormorant Garamond', serif; font-style: italic;
+        font-weight: 600; font-size: 146px; line-height: 0.95;
+        color: var(--text-color); margin-top: 0;
+      }
+
+      .handle-row {
+        display: flex; align-items: center; gap: 12px; margin-top: 32px;
+      }
+      .handle {
+        font-family: 'Poppins', sans-serif; font-weight: 400;
+        font-size: 34px; letter-spacing: 0.03em;
+        color: color-mix(in srgb, var(--text-color) calc(var(--handle-opacity) * 100%), transparent);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0"
+         data-duration="7" data-width="1080" data-height="1920">
+
+      <div id="veil" class="veil"></div>
+
+      <!-- STAGE 1 -->
+      <div id="stage1" class="stage" style="top: 1050px;">
+        <div class="kicker-row text-halo">
+          <span class="kicker" id="s1-kicker"></span>
+          <div class="icon" id="s1-icon">
+            <!-- bookmark icon — replaced for stage2 -->
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M5 5C5 3.9 5.9 3 7 3h10c1.1 0 2 .9 2 2v16l-7-3.5L5 21V5Z"
+                    stroke="var(--accent)" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+        <div class="hairline" id="s1-hairline"></div>
+        <div class="context-line text-halo" id="s1-context"></div>
+        <div class="hero-word text-halo" id="s1-hero"></div>
+      </div>
+
+      <!-- STAGE 2 -->
+      <div id="stage2" class="stage" style="top: 1020px;">
+        <div class="kicker-row text-halo">
+          <span class="kicker" id="s2-kicker"></span>
+        </div>
+        <div class="hairline" id="s2-hairline"></div>
+        <div class="context-line text-halo" id="s2-context"></div>
+        <div class="hero-word text-halo" id="s2-hero" style="font-size: 132px;"></div>
+        <div class="handle-row text-halo" id="s2-handle-row">
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="var(--accent)" stroke-width="1.5"/>
+              <line x1="12" y1="7" x2="12" y2="17" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="7" y1="12" x2="17" y2="12" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <span class="handle" id="s2-handle"></span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // CONFIG injected by make_outro.py — do not edit this line:
+      // __OUTRO_CONFIG_INJECT__
+
+      const cfg = window.__OUTRO_CONFIG__ || {};
+      const L = cfg.background_luminance ?? 75;
+
+      // Luminance-aware text/veil colors
+      const isDark = L < 40;
+      const isLight = L > 65;
+      const root = document.documentElement;
+
+      if (isLight) {
+        root.style.setProperty('--text-color', 'rgba(30,30,30,0.92)');
+        root.style.setProperty('--text-shadow', '0px 1px 8px rgba(255,255,255,0.6), 0px 0px 20px rgba(255,255,255,0.3)');
+        root.style.setProperty('--veil-color', '#FAF6F0');
+        root.style.setProperty('--kicker-opacity', '0.65');
+        root.style.setProperty('--handle-opacity', '0.55');
+      } else if (isDark) {
+        root.style.setProperty('--text-color', '#FAF6F0');
+        root.style.setProperty('--text-shadow', '0 2px 30px rgba(44,37,35,0.35), 0 1px 4px rgba(44,37,35,0.25)');
+        root.style.setProperty('--veil-color', '#2C2523');
+        root.style.setProperty('--kicker-opacity', '0.70');
+        root.style.setProperty('--handle-opacity', '0.60');
+      } else {
+        // mid-tone: white text, dark scrim
+        root.style.setProperty('--text-color', '#FFFFFF');
+        root.style.setProperty('--text-shadow', '0 2px 14px rgba(44,37,35,0.45), 0 1px 4px rgba(44,37,35,0.25)');
+        root.style.setProperty('--veil-color', '#2C2523');
+        root.style.setProperty('--kicker-opacity', '0.70');
+        root.style.setProperty('--handle-opacity', '0.60');
+      }
+
+      // Populate content
+      const s1 = cfg.stage1 || {};
+      const s2 = cfg.stage2 || {};
+      document.getElementById('s1-kicker').textContent  = s1.kicker  || '';
+      document.getElementById('s1-context').textContent = s1.context || '';
+      document.getElementById('s1-hero').textContent    = s1.hero    || '';
+      document.getElementById('s2-kicker').textContent  = s2.kicker  || '';
+      document.getElementById('s2-context').textContent = s2.context || '';
+      document.getElementById('s2-hero').innerHTML      = (s2.hero || '').replace(' / ', '<br>');
+      document.getElementById('s2-handle').textContent  = s2.handle  || '';
+
+      // Hide handle row if no handle provided
+      if (!s2.handle) document.getElementById('s2-handle-row').style.display = 'none';
+
+      // === ANIMATION ===
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      const veilOpacity = cfg.veil_opacity ?? 0.88;
+      const eR = 'power3.out', eH = 'power2.out';
+
+      // Veil: fast rise (power2.out → sofort merklich), holds for rest
+      tl.to('#veil', { opacity: veilOpacity, duration: 3.5, ease: 'power2.out' }, 0);
+
+      // STAGE 1 (0.3 – 3.2s)
+      tl.set('#stage1', { opacity: 1 }, 0.3);
+      tl.fromTo('#s1-hairline', { width: 0 }, { width: 120, duration: 0.6, ease: eR }, 0.3);
+      tl.fromTo('#s1-kicker',   { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7, ease: eR }, 0.45);
+      tl.fromTo('#s1-icon',     { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7, ease: eR }, 0.45);
+      tl.fromTo('#s1-context',  { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7, ease: eR }, 0.6);
+      tl.fromTo('#s1-hero',     { opacity: 0, scale: 0.96, y: 14 }, { opacity: 1, scale: 1, y: 0, duration: 0.9, ease: eH }, 0.75);
+      tl.to('#stage1', { opacity: 0, duration: 0.5, ease: 'power2.inOut' }, 3.2);
+
+      // STAGE 2 (3.6 – 7.0s)
+      tl.set('#stage2', { opacity: 1 }, 3.6);
+      tl.fromTo('#s2-hairline', { width: 0 }, { width: 120, duration: 0.6, ease: eR }, 3.6);
+      tl.fromTo('#s2-kicker',   { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7, ease: eR }, 3.75);
+      tl.fromTo('#s2-context',  { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7, ease: eR }, 3.9);
+      tl.fromTo('#s2-hero',     { opacity: 0, scale: 0.96, y: 14 }, { opacity: 1, scale: 1, y: 0, duration: 0.9, ease: eH }, 4.05);
+      tl.fromTo('#s2-handle-row', { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: eR }, 4.4);
+
+      window.__timelines['main'] = tl;
+    </script>
+  </body>
+</html>
