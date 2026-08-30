@@ -30,6 +30,17 @@ from pathlib import Path
 import requests
 
 
+# Windows consoles default to cp1252, which raises UnicodeEncodeError when the
+# status prints below include a non-ASCII video filename (accents, emoji, CJK).
+# Force UTF-8 on stdout/stderr so this helper behaves identically on Windows,
+# macOS, and Linux. No-op where the stream is already UTF-8 or can't reconfigure.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
+
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 
 

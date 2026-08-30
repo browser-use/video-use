@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,17 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+
+# Windows consoles default to cp1252, which raises UnicodeEncodeError when the
+# status prints below include a non-ASCII path (accents, emoji, CJK). Force
+# UTF-8 on stdout/stderr so this helper behaves identically on Windows, macOS,
+# and Linux. No-op where the stream is already UTF-8 or can't be reconfigured.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
 
 
 # -------- Frame extraction ---------------------------------------------------
@@ -151,12 +163,21 @@ def find_silences(words: list[dict], start: float, end: float, threshold: float 
 # -------- Font loading -------------------------------------------------------
 
 
+# Windows has no fixed font directory on C:, so derive it from %WINDIR%
+# (falls back to the default install path). Consolas mirrors the monospace
+# intent of Menlo/DejaVuSansMono; Arial is the sans fallback. Without these,
+# every candidate below misses on Windows and load_font drops to PIL's tiny
+# default bitmap font, rendering the filmstrip labels nearly illegibly.
+_WIN_FONTS = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+
 FONT_CANDIDATES = [
     "/System/Library/Fonts/Menlo.ttc",
     "/System/Library/Fonts/Helvetica.ttc",
     "/System/Library/Fonts/SFNSMono.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    str(_WIN_FONTS / "consola.ttf"),  # Consolas — Windows monospace
+    str(_WIN_FONTS / "arial.ttf"),    # Arial — Windows sans fallback
 ]
 
 
