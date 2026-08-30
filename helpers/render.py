@@ -49,8 +49,11 @@ except Exception:
 # baseline roughly 30% up from the bottom on any aspect — clear of the UI on
 # every major vertical-video platform. Do not drop this below ~75 without a
 # specific reason.
+# FontName: Helvetica does not exist on Windows; libass then silently falls back
+# to its default face and the proven metrics above no longer hold. Arial is
+# metric-compatible with Helvetica and present on Windows and macOS both.
 SUB_FORCE_STYLE = (
-    "FontName=Helvetica,FontSize=18,Bold=1,"
+    "FontName=Arial,FontSize=18,Bold=1,"
     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,"
     "BorderStyle=1,Outline=2,Shadow=0,"
     "Alignment=2,MarginV=90"
@@ -641,7 +644,16 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        # Backslashes are eaten by the filtergraph parser, so a Windows path
+        # arrives as "C:UsersvitorFoo" and the filter fails with ENOENT. Convert
+        # to forward slashes BEFORE escaping the drive colon; ffmpeg accepts
+        # forward slashes on Windows.
+        subs_abs = (
+            str(subtitles_path.resolve())
+            .replace("\\", "/")
+            .replace(":", r"\:")
+            .replace("'", r"\'")
+        )
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )

@@ -157,6 +157,12 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/SFNSMono.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    # Windows. Without these, load_default() returns a fixed ~11px bitmap face
+    # that ignores `size`, and the timestamp labels the self-eval pass depends on
+    # come out unreadable.
+    "C:/Windows/Fonts/consola.ttf",
+    "C:/Windows/Fonts/lucon.ttf",
+    "C:/Windows/Fonts/arial.ttf",
 ]
 
 
