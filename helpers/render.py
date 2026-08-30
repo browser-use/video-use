@@ -372,7 +372,13 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     """Lossless concat via the concat demuxer. No re-encode."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
-    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    # Escape single quotes for the concat demuxer line format. A literal ' inside
+    # a single-quoted path must be written as '\'' (close quote, escaped quote,
+    # reopen quote); otherwise a path containing an apostrophe (e.g. a folder
+    # named "What I couldn't do") truncates the path and ffmpeg fails to concat.
+    def _concat_quote(p: Path) -> str:
+        return str(p.resolve()).replace("'", "'\\''")
+    concat_list.write_text("".join(f"file '{_concat_quote(p)}'\n" for p in segment_paths))
 
     cmd = [
         "ffmpeg", "-y",
