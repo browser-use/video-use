@@ -10,7 +10,7 @@ Implements the HEURISTICS render pipeline in the correct order:
 
 Optionally builds a master SRT from the per-source transcripts + EDL
 output-timeline offsets, applies the proven force_style (2-word
-UPPERCASE chunks, Helvetica 18 Bold, MarginV=35).
+UPPERCASE chunks, Helvetica 18 Bold, MarginV=90).
 
 Usage:
     python helpers/render.py <edl.json> -o final.mp4
