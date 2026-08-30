@@ -14,7 +14,7 @@ You're setting up a conversation-driven video editor for the user. After install
 Three things must exist on this machine:
 
 1. The `video-use` repo cloned somewhere stable.
-2. `ffmpeg` on `$PATH` (plus optional `yt-dlp` for online sources).
+2. `ffmpeg` on `$PATH` (plus optional `yt-dlp` for online sources). Subtitle burn-in additionally needs an ffmpeg build with the libass-backed `subtitles` filter.
 3. An ElevenLabs API key in `.env` at the repo root (for Scribe transcription).
 
 And one thing must be true about the current agent:
@@ -50,11 +50,17 @@ command -v uv >/dev/null && uv sync || pip install -e .
 
 ### 3. Install ffmpeg (+ optional yt-dlp)
 
-`ffmpeg` and `ffprobe` are hard requirements. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation engines such as HyperFrames, Remotion, and Manim are installed lazily the first time a project actually needs them.
+`ffmpeg` and `ffprobe` are hard requirements. Subtitle burn-in needs the libass-backed `subtitles` filter; subtitle-free editing does not. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation engines such as HyperFrames, Remotion, and Manim are installed lazily the first time a project actually needs them.
 
 ```bash
-# macOS
+# macOS — enough for subtitle-free editing
 command -v ffmpeg >/dev/null || brew install ffmpeg
+
+# macOS — use this build when burning subtitles
+brew install ffmpeg-full
+export PATH="$(brew --prefix ffmpeg-full)/bin:$PATH"
+ffmpeg -hide_banner -filters 2>/dev/null | grep -w subtitles
+
 command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 
 # Debian / Ubuntu
@@ -66,6 +72,8 @@ command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 ```
 
 If `brew` / `apt` / `pacman` requires a sudo prompt, tell the user the exact command and wait. Do not invent a password.
+
+On macOS, `ffmpeg-full` is keg-only. The `export PATH=...` line must take precedence over another ffmpeg; persist it in the user's shell profile if they want subtitle burn-in in future sessions. The filter check must print an exact `subtitles` entry. If it does not, `render.py` will stop before segment extraction with the same installation and PATH guidance. Linux package builds vary, so run the same filter check before a subtitle project.
 
 ### 4. Register the skill with the current agent
 
@@ -134,6 +142,12 @@ python ~/Developer/video-use/helpers/timeline_view.py --help >/dev/null && echo 
 ffprobe -version | head -1
 ```
 
+If the user intends to burn subtitles, also verify the active binary:
+
+```bash
+ffmpeg -hide_banner -filters 2>/dev/null | grep -w subtitles
+```
+
 Full transcription test is optional at install time — it burns Scribe credits. Better to wait until the user hands you their first clip.
 
 ### 7. Hand off
@@ -154,7 +168,7 @@ Tell the user, in one short message:
 
 - Symlink the **whole directory**, not just `SKILL.md`. The helpers need to sit next to it.
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
-- `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
+- Any modern (≥ 4.x) ffmpeg is enough for subtitle-free editing. Subtitle burn-in specifically requires a build with libass and an exact `subtitles` filter entry.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
 - Node.js/npm are only needed for HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
 - HyperFrames, Remotion, and Manim are optional animation engines. Don't install or prefer one globally during setup; pick the engine per animation slot in `SKILL.md`. HyperFrames can run through `npx --yes hyperframes ...` in the slot directory. Remotion can be scaffolded with `npx create-video@latest` or installed inside the slot before rendering.

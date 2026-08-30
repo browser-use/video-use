@@ -60,7 +60,7 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 First-time install lives in `install.md` (clone, deps, ffmpeg, skill registration, API key). Don't re-run it every session; on cold start just verify:
 
 - `ELEVENLABS_API_KEY` resolves — either in the environment or in `.env` at the video-use repo root. If missing, ask the user to paste one and write it to `.env` (never to the user's `<videos_dir>`).
-- `ffmpeg` + `ffprobe` on PATH.
+- `ffmpeg` + `ffprobe` on PATH. When the project burns subtitles, verify that the selected `ffmpeg` exposes the libass-backed `subtitles` filter with `ffmpeg -hide_banner -filters | grep -w subtitles`; subtitle-free editing does not require libass.
 - Python deps installed (`uv sync` or `pip install -e .` inside the repo).
 - Node.js + npm available if the session needs HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
 - `yt-dlp`, HyperFrames, Remotion, Manim installed only on first use.
@@ -75,7 +75,7 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
-- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
+- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline. Subtitle renders preflight the selected ffmpeg for libass support before extraction.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
@@ -181,14 +181,16 @@ Subtitles have three dimensions worth reasoning about: **chunking** (1/2/3/sente
 
 **Worked styles** — pick, adapt, or invent:
 
-**`bold-overlay`** — short-form tech launch, fast-paced social. 2-word chunks, UPPERCASE, break on punctuation, Helvetica 18 Bold, white-on-outline, `MarginV=35`. `render.py` ships with this as `SUB_FORCE_STYLE`.
+**`bold-overlay`** — short-form tech launch, fast-paced social. 2-word chunks, UPPERCASE, break on punctuation, Helvetica 18 Bold, white-on-outline, `MarginV=90`. `render.py` ships with this as `SUB_FORCE_STYLE`.
 
 ```
 FontName=Helvetica,FontSize=18,Bold=1,
 PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,
 BorderStyle=1,Outline=2,Shadow=0,
-Alignment=2,MarginV=35
+Alignment=2,MarginV=90
 ```
+
+Helvetica remains the default for compatibility. For CJK or other non-Latin captions, set `subtitle_font` in the EDL to an installed font with glyph coverage for the project language (for example, `"Heiti SC"`); do not rely on a platform-specific global fallback.
 
 **`natural-sentence`** (if you invent this mode) — narrative, documentary, education. 4–7 word chunks, sentence case, break on natural pauses, `MarginV=60–80`, larger font for readability, slightly wider max-width. No shipped force_style — design one if you need it.
 
@@ -282,11 +284,12 @@ Match the source unless the user asked for something specific. Common targets: `
     {"file": "edit/animations/slot_1/render.mp4", "start_in_output": 0.0, "duration": 5.0}
   ],
   "subtitles": "edit/master.srt",
+  "subtitle_font": "Heiti SC",
   "total_duration_s": 87.4
 }
 ```
 
-`grade` is a preset name or raw ffmpeg filter. `overlays` are rendered animation clips. `subtitles` is optional and applied LAST.
+`grade` is a preset name or raw ffmpeg filter. `overlays` are rendered animation clips. `subtitles` is optional and applied LAST. `subtitle_font` is optional, defaults to `Helvetica`, and must name an installed font that covers the caption language.
 
 ## Memory — `project.md`
 

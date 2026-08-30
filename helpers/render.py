@@ -10,7 +10,7 @@ Implements the HEURISTICS render pipeline in the correct order:
 
 Optionally builds a master SRT from the per-source transcripts + EDL
 output-timeline offsets, applies the proven force_style (2-word
-UPPERCASE chunks, Helvetica 18 Bold, MarginV=35).
+UPPERCASE chunks, Helvetica 18 Bold, MarginV=90).
 
 Usage:
     python helpers/render.py <edl.json> -o final.mp4
@@ -49,12 +49,40 @@ except Exception:
 # baseline roughly 30% up from the bottom on any aspect — clear of the UI on
 # every major vertical-video platform. Do not drop this below ~75 without a
 # specific reason.
-SUB_FORCE_STYLE = (
-    "FontName=Helvetica,FontSize=18,Bold=1,"
+SUB_FORCE_STYLE_SUFFIX = (
+    "FontSize=18,Bold=1,"
     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,"
     "BorderStyle=1,Outline=2,Shadow=0,"
     "Alignment=2,MarginV=90"
 )
+
+
+def build_subtitle_force_style(font_name: object = None) -> str:
+    """Build the proven subtitle style with an optional font override."""
+    if font_name is not None and not isinstance(font_name, str):
+        raise ValueError("subtitle_font must be a string")
+    font_name = font_name or "Helvetica"
+    if re.search(r"[,'\\\x00-\x1f\x7f]", font_name):
+        raise ValueError(
+            "subtitle_font must not contain commas, apostrophes, backslashes, "
+            "or control characters"
+        )
+    return f"FontName={font_name},{SUB_FORCE_STYLE_SUFFIX}"
+
+
+SUB_FORCE_STYLE = build_subtitle_force_style()
+
+SUBTITLES_FILTER_ERROR = """subtitle burn-in requires a libass-enabled ffmpeg with the `subtitles` filter.
+
+macOS (Homebrew):
+  brew install ffmpeg-full
+  export PATH="$(brew --prefix ffmpeg-full)/bin:$PATH"
+
+Make sure that PATH entry takes precedence over another ffmpeg, then verify:
+  ffmpeg -hide_banner -filters | grep -w subtitles
+
+Subtitle-free renders can continue with --no-subtitles.
+"""
 
 # -------- Helpers ------------------------------------------------------------
 
@@ -63,6 +91,35 @@ def run(cmd: list[str], quiet: bool = False) -> None:
     if not quiet:
         print(f"  $ {' '.join(str(c) for c in cmd[:6])}{' …' if len(cmd) > 6 else ''}")
     subprocess.run(cmd, check=True)
+
+
+def has_subtitles_filter(filter_listing: str) -> bool:
+    """Return True when an ffmpeg filter listing has an exact subtitles entry."""
+    for line in filter_listing.splitlines():
+        fields = line.split()
+        if (
+            len(fields) >= 2
+            and re.fullmatch(r"[TSC.]{2,3}", fields[0])
+            and fields[1] == "subtitles"
+        ):
+            return True
+    return False
+
+
+def require_subtitles_filter() -> None:
+    """Exit with installation guidance unless ffmpeg supports subtitle burn-in."""
+    try:
+        probe = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-filters"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        raise SystemExit(SUBTITLES_FILTER_ERROR) from None
+
+    if not has_subtitles_filter(probe.stdout):
+        raise SystemExit(SUBTITLES_FILTER_ERROR)
 
 
 def resolve_grade_filter(grade_field: str | None) -> str:
@@ -603,6 +660,7 @@ def build_final_composite(
     subtitles_path: Path | None,
     out_path: Path,
     edit_dir: Path,
+    subtitle_force_style: str = SUB_FORCE_STYLE,
 ) -> None:
     """Final pass: base → overlays (PTS-shifted) → subtitles LAST → out.
 
@@ -643,7 +701,7 @@ def build_final_composite(
     if has_subs:
         subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
         filter_parts.append(
-            f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
+            f"{current}subtitles='{subs_abs}':force_style='{subtitle_force_style}'[outv]"
         )
         out_label = "[outv]"
     else:
@@ -723,6 +781,29 @@ def main() -> None:
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
 
+    # Resolve subtitle intent before expensive segment extraction so an ffmpeg
+    # without libass fails immediately. Missing configured files keep their
+    # existing warning-and-skip behavior.
+    subs_path: Path | None = None
+    subtitle_force_style = SUB_FORCE_STYLE
+    if not args.no_subtitles:
+        if args.build_subtitles:
+            require_subtitles_filter()
+        elif edl.get("subtitles"):
+            subs_path = resolve_path(edl["subtitles"], edit_dir)
+            if subs_path.exists():
+                require_subtitles_filter()
+            else:
+                print(f"warning: subtitles path in EDL does not exist: {subs_path}")
+                subs_path = None
+        if args.build_subtitles or subs_path is not None:
+            try:
+                subtitle_force_style = build_subtitle_force_style(
+                    edl.get("subtitle_font")
+                )
+            except ValueError as exc:
+                raise SystemExit(f"invalid subtitle_font in edl: {exc}") from None
+
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(
         edl, edit_dir, preview=args.preview, draft=args.draft, fps=args.fps
@@ -739,26 +820,33 @@ def main() -> None:
     concat_segments(segment_paths, base_path, edit_dir)
 
     # 3. Subtitles: build if requested, resolve final path
-    subs_path: Path | None = None
-    if not args.no_subtitles:
-        if args.build_subtitles:
-            subs_path = edit_dir / "master.srt"
-            build_master_srt(edl, edit_dir, subs_path)
-        elif edl.get("subtitles"):
-            subs_path = resolve_path(edl["subtitles"], edit_dir)
-            if not subs_path.exists():
-                print(f"warning: subtitles path in EDL does not exist: {subs_path}")
-                subs_path = None
+    if not args.no_subtitles and args.build_subtitles:
+        subs_path = edit_dir / "master.srt"
+        build_master_srt(edl, edit_dir, subs_path)
 
     # 4. Composite (overlays + subtitles LAST) → intermediate (pre-loudnorm) path
     overlays = edl.get("overlays") or []
     if args.no_loudnorm:
         # Composite directly to final output
-        build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
+        build_final_composite(
+            base_path,
+            overlays,
+            subs_path,
+            out_path,
+            edit_dir,
+            subtitle_force_style=subtitle_force_style,
+        )
     else:
         # Composite to a temp file, then run loudnorm → final output
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
-        build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
+        build_final_composite(
+            base_path,
+            overlays,
+            subs_path,
+            tmp_composite,
+            edit_dir,
+            subtitle_force_style=subtitle_force_style,
+        )
         print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
         apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft)
         tmp_composite.unlink(missing_ok=True)
