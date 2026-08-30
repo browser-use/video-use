@@ -1,3 +1,5 @@
+**English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
+
 <p align="center">
   <img src="static/video-use-banner.png" alt="video-use" width="100%">
 </p>
