@@ -9,7 +9,8 @@ Two modes:
      per-clip correction. Samples N frames via ffmpeg, computes mean brightness,
      RMS contrast, saturation. Emits a bounded filter string that corrects
      under-exposure, flatness, and mild desaturation without applying any
-     creative color shift. All adjustments capped at ±8% on any axis.
+     creative color shift. Adjustments are bounded: contrast ±8%, gamma +10%/-6%,
+     saturation ±6%.
 
      The goal is "make it look clean without looking graded". Never applies
      creative LUTs, teal/orange splits, or filmic curves. For creative looks,
@@ -183,8 +184,9 @@ def auto_grade_for_clip(
 ) -> tuple[str, dict[str, float]]:
     """Analyze a clip range and emit a subtle per-clip correction filter.
 
-    Returns (filter_string, stats_dict). The filter is bounded to ±8% on any axis
-    and applies NO color shift. It only addresses:
+    Returns (filter_string, stats_dict). Adjustments are bounded per axis
+    (contrast ±8%, gamma +10%/-6%, saturation ±6%) and apply NO color shift.
+    It only addresses:
       - Underexposure (lift gamma slightly if too dark)
       - Flatness (tiny contrast boost if range is narrow)
       - Desaturation (tiny sat boost if extremely flat)
