@@ -616,7 +616,12 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        # ffmpeg's filtergraph parser treats "\" as its own escape char, so a raw
+        # Windows path (C:\apps\...) gets its backslashes eaten before the colon
+        # escape even applies — "C:\apps\..." comes out as "Capps...". Forward
+        # slashes sidestep the whole problem; ffmpeg accepts them natively on
+        # Windows too, so there's no backslash-escaping to get wrong.
+        subs_abs = str(subtitles_path.resolve()).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )
