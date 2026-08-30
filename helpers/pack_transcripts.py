@@ -21,6 +21,14 @@ import sys
 from pathlib import Path
 
 
+# Windows consoles default to cp1252 and cannot encode '→' / '≥' from the
+# status output below; printing one raises UnicodeEncodeError. Force UTF-8.
+# (The markdown file itself is already written with an explicit utf-8 encoding.)
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def format_time(seconds: float) -> str:
     """Format a time in seconds as "NNN.NN" with fixed 6-char width for alignment."""
     return f"{seconds:06.2f}"

@@ -29,6 +29,14 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 
+
+# Windows consoles default to cp1252, which cannot encode the '→' / '×' / '…'
+# characters used in the progress output below — printing one raises
+# UnicodeEncodeError mid-render. Force UTF-8 on the streams we own.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory
 except Exception:
@@ -641,7 +649,17 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        # ffmpeg's filter parser treats '\' as an escape character, so a Windows
+        # path (C:\Users\...) arrives at libass with its separators stripped and
+        # fails with "No such file or directory". Forward slashes are accepted by
+        # ffmpeg on Windows and are a no-op on POSIX; the drive colon still needs
+        # escaping because ':' separates filter options.
+        subs_abs = (
+            str(subtitles_path.resolve())
+            .replace("\\", "/")
+            .replace(":", r"\:")
+            .replace("'", r"\'")
+        )
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )
