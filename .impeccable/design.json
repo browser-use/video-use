@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-05T12:27:31.614416+00:00",
+  "title": "Design System: video-use",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Orange",
+        "canonical": "#ff6b35"
+      },
+      "signal-blue": {
+        "role": "secondary",
+        "displayName": "Waveform Blue",
+        "canonical": "#6b9fff"
+      },
+      "stone-50": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "#fafaf9"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Void Ink",
+        "canonical": "#0f0f16"
+      }
+    },
+    "shadows": [
+      {
+        "name": "sheet-lift",
+        "value": "0 1px 2px rgba(0,0,0,0.06)",
+        "purpose": "Light content sheet over stone-200 desk only."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sheet",
+        "value": "1400px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Dark Panel",
+      "kind": "card",
+      "refersTo": "panel-dark",
+      "description": "Editor chrome container for timeline composites.",
+      "html": "<div class=\"ds-panel-dark\"><div class=\"ds-panel-bar\"><span class=\"ds-mono\">timeline_view.py</span><span class=\"ds-badge\">ON-DEMAND</span></div><div class=\"ds-panel-body\">stage</div></div>",
+      "css": ".ds-panel-dark{background:#1c1917;color:#fff;border:1px solid #44403c;border-radius:12px;overflow:hidden;font-family:Inter,system-ui,sans-serif}.ds-panel-bar{display:flex;justify-content:space-between;align-items:center;background:#292524;border-bottom:1px solid #44403c;padding:10px 20px}.ds-mono{font-family:JetBrains Mono,ui-monospace,monospace;font-size:11px;color:#a8a29e}.ds-badge{font-family:JetBrains Mono,monospace;font-size:10px;font-weight:700;color:#ff6b35}.ds-panel-body{padding:20px;background:#0f0f16}"
+    },
+    {
+      "name": "Accent Kicker",
+      "kind": "custom",
+      "refersTo": "chip-accent",
+      "description": "Uppercase section/brand kicker.",
+      "html": "<div class=\"ds-kicker\">The Harness</div>",
+      "css": ".ds-kicker{font-family:Inter,system-ui,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#ff6b35}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Harness Console",
+    "overview": "Dark instrument panel + light paper desk. Orange signal, blue audio channel, Inter + JetBrains Mono.",
+    "keyCharacteristics": [
+      "Dual surface: stone desk + dark console",
+      "One orange accent",
+      "Mono for machine strings",
+      "Tonal depth over heavy shadows"
+    ],
+    "rules": [
+      {
+        "name": "The One Flame Rule",
+        "body": "Orange is the only warm accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Channel Split Rule",
+        "body": "Blue = sound/time; orange = attention.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Means Machine Rule",
+        "body": "Paths and ASR words stay mono.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Console Rule",
+        "body": "Border + tone inside editor chrome.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep orange scarce and semantic",
+      "Do put machine strings in JetBrains Mono",
+      "Do stage explainers on light sheet; composites in dark console"
+    ],
+    "donts": [
+      "Don't introduce purple AI gradients",
+      "Don't set long prose in mono",
+      "Don't use accent as large fills"
+    ]
+  }
+}
