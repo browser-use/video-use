@@ -68,6 +68,24 @@ cp .env.example .env
 $EDITOR .env                    # ELEVENLABS_API_KEY=...
 ```
 
+## Import online video
+
+Import URLs before transcription. Files land in `edit/downloads/` and pass an
+`ffprobe` video-stream check before the editor sees them.
+
+```bash
+python ~/Developer/video-use/helpers/import_sources.py \
+  "https://x.com/example/status/1893456789012345678"
+```
+
+X post imports use the [Xquik Get Tweet API](https://docs.xquik.com/api-reference/x/get-tweet)
+to select the highest-bitrate MP4 rendition. Export
+`X_TWITTER_SCRAPER_API_KEY` first. Other supported sites use `yt-dlp` through
+the same command. Each URL is imported without playlists by default.
+
+Xquik is an independent third-party service. Not affiliated with X Corp.
+"Twitter" and "X" are trademarks of X Corp.
+
 ## How it works
 
 The LLM never watches the video. It **reads** it — through two layers that together give it everything it needs to cut with word-boundary precision.

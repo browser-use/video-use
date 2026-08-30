@@ -17,6 +17,9 @@ Three things must exist on this machine:
 2. `ffmpeg` on `$PATH` (plus optional `yt-dlp` for online sources).
 3. An ElevenLabs API key in `.env` at the repo root (for Scribe transcription).
 
+An Xquik API key is optional. It is required only when the user imports video
+from an X post URL.
+
 And one thing must be true about the current agent:
 
 4. It can discover `SKILL.md` — either via a global skills directory (`~/.claude/skills/`, `~/.codex/skills/`) or via a `CLAUDE.md` / system-prompt import.
@@ -136,6 +139,25 @@ ffprobe -version | head -1
 
 Full transcription test is optional at install time — it burns Scribe credits. Better to wait until the user hands you their first clip.
 
+### 6a. Configure X post imports when requested
+
+Do not require this during the normal install. When the user first provides an
+X post URL, ask them to export the key in their current shell:
+
+```bash
+export X_TWITTER_SCRAPER_API_KEY="xq_YOUR_KEY_HERE"
+python ~/Developer/video-use/helpers/import_sources.py \
+  "https://x.com/example/status/1893456789012345678"
+```
+
+The helper calls Xquik's read-only Get Tweet endpoint, selects the
+highest-bitrate MP4 rendition, enforces a 500 MiB default limit, and validates
+the finished file with `ffprobe`. It never sends the key to the media host.
+Other HTTPS video URLs use the same helper through `yt-dlp`.
+
+Xquik is an independent third-party service. Not affiliated with X Corp.
+"Twitter" and "X" are trademarks of X Corp.
+
 ### 7. Hand off
 
 Tell the user, in one short message:
@@ -156,6 +178,7 @@ Tell the user, in one short message:
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
 - `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
+- `X_TWITTER_SCRAPER_API_KEY` is optional. Ask for it only for an X post import.
 - Node.js/npm are only needed for HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
 - HyperFrames, Remotion, and Manim are optional animation engines. Don't install or prefer one globally during setup; pick the engine per animation slot in `SKILL.md`. HyperFrames can run through `npx --yes hyperframes ...` in the slot directory. Remotion can be scaffolded with `npx create-video@latest` or installed inside the slot before rendering.
 - Never run transcription as part of install verification unless the user explicitly asks — Scribe costs real money.
