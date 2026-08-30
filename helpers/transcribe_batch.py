@@ -1,14 +1,15 @@
 """Batch-transcribe every video in a directory with 4 parallel workers.
 
-Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
-each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
+Walks <videos_dir> for common video extensions, transcribes each via
+DashScope paraformer-v2 (see helpers/transcribe.py), writes transcripts
+to <videos_dir>/edit/transcripts/<name>.json.
 
 Cached per-file: any source that already has a transcript is skipped.
 
 Usage:
     python helpers/transcribe_batch.py <videos_dir>
     python helpers/transcribe_batch.py <videos_dir> --workers 4
-    python helpers/transcribe_batch.py <videos_dir> --num-speakers 2
+    python helpers/transcribe_batch.py <videos_dir> --language zh
     python helpers/transcribe_batch.py <videos_dir> --edit-dir /custom/edit
 """
 
@@ -48,13 +49,7 @@ def main() -> None:
         "--language",
         type=str,
         default=None,
-        help="Optional ISO language code. Omit to auto-detect per file.",
-    )
-    ap.add_argument(
-        "--num-speakers",
-        type=int,
-        default=None,
-        help="Optional number of speakers. Improves diarization when known.",
+        help="Language hint (e.g. 'zh', 'en'). Omit to auto-detect per file.",
     )
     args = ap.parse_args()
 
@@ -91,7 +86,6 @@ def main() -> None:
                 edit_dir=edit_dir,
                 api_key=api_key,
                 language=args.language,
-                num_speakers=args.num_speakers,
                 verbose=False,
             ): v
             for v in pending

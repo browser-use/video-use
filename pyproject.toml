@@ -6,6 +6,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "requests",
+    "dashscope>=1.20",
     "librosa",
     "matplotlib",
     "pillow",
@@ -14,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 animations = ["manim"]
+dev = ["pytest>=7"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
