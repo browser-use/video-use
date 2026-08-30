@@ -619,6 +619,11 @@ def build_final_composite(
     inputs: list[str] = ["-i", str(base_path)]
     for ov in overlays:
         ov_path = resolve_path(ov["file"], edit_dir)
+        # WebM/VP9 alpha lives in a side-channel that ffmpeg's native vp9
+        # decoder ignores; force libvpx-vp9 so transparent overlays stay
+        # transparent instead of compositing as opaque black.
+        if ov_path.suffix.lower() == ".webm":
+            inputs += ["-c:v", "libvpx-vp9"]
         inputs += ["-i", str(ov_path)]
 
     filter_parts: list[str] = []
@@ -642,9 +647,15 @@ def build_final_composite(
     # Subtitles LAST — Rule 1
     if has_subs:
         subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
-        filter_parts.append(
-            f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
-        )
+        # filename= (named option) is required: ffmpeg 8's filtergraph parser
+        # rejects the positional quoted form when the path needs quoting.
+        if subtitles_path.suffix.lower() == ".ass":
+            # ASS files carry their own styles — force_style would clobber them.
+            filter_parts.append(f"{current}subtitles=filename='{subs_abs}'[outv]")
+        else:
+            filter_parts.append(
+                f"{current}subtitles=filename='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
+            )
         out_label = "[outv]"
     else:
         # Rename the last overlay output to [outv] for consistency
