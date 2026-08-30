@@ -133,15 +133,33 @@ def is_hdr_source(video: Path) -> bool:
 
 
 def is_portrait_source(video: Path) -> bool:
-    """Return True if the video's height > width (portrait / vertical)."""
+    """Return True if the video displays taller than wide (portrait / vertical).
+
+    Phone cameras store vertical footage as a landscape stream plus a rotation
+    entry. ffmpeg auto-rotates on decode, so the displayed dimensions -- not the
+    stored ones -- decide which axis to scale by.
+    """
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", str(video)],
+             "-show_entries", "stream=width,height:stream_side_data=rotation:stream_tags=rotate",
+             "-of", "json", str(video)],
             capture_output=True, text=True, check=True,
         )
-        w, h = map(int, out.stdout.strip().split(","))
+        stream = json.loads(out.stdout)["streams"][0]
+        w, h = int(stream["width"]), int(stream["height"])
+
+        rotation = 0
+        for side_data in stream.get("side_data_list", []):
+            if "rotation" in side_data:
+                rotation = int(side_data["rotation"])
+                break
+        else:
+            # ffmpeg < 5 exposes the display matrix as a stream tag instead.
+            rotation = int(stream.get("tags", {}).get("rotate", 0))
+
+        if rotation % 180 != 0:
+            w, h = h, w
         return h > w
     except Exception:
         return False
