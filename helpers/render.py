@@ -93,6 +93,27 @@ def resolve_path(maybe_path: str, base: Path) -> Path:
     return (base / p).resolve()
 
 
+def _escape_filter_value(s: str) -> str:
+    r"""Make a path safe inside an ffmpeg filtergraph option value.
+
+    In a filtergraph, ':' separates options and '\' is special, so a Windows
+    path (C:\Users\me\master.srt) breaks parsing. Forward-slash the separators
+    (ffmpeg accepts them on Windows), then escape the drive colon and any quote.
+    Pure string transform — host-independent, so it's the unit the tests pin.
+    """
+    return s.replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+
+
+def escape_subtitles_path(path: Path) -> str:
+    r"""Resolve `path` and escape it for ffmpeg's `subtitles=` filter option.
+
+    No-op-shaped on POSIX (paths there contain neither '\' nor a drive ':');
+    on Windows it turns C:\Users\me\master.srt into C\:/Users/me/master.srt so
+    the subtitles filter parses instead of erroring.
+    """
+    return _escape_filter_value(str(path.resolve()))
+
+
 # -------- HDR → SDR tone mapping (HLG / PQ sources) --------------------------
 #
 # iPhone defaults to HLG HDR in Rec.2020 (and many mirrorless cameras ship PQ).
@@ -641,7 +662,7 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        subs_abs = escape_subtitles_path(subtitles_path)
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )
