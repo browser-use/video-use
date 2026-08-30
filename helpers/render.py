@@ -656,6 +656,21 @@ def build_final_composite(
 
     filter_complex = ";".join(filter_parts)
 
+    # Clamp output to the base duration. overlay's framesync would otherwise
+    # extend the output with frozen frames whenever an overlay input outlasts
+    # the base video (e.g. a caption layer rendered with a trailing hold).
+    base_dur = None
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(base_path)],
+            capture_output=True, text=True, check=True,
+        )
+        base_dur = float(out.stdout.strip().splitlines()[0])
+    except Exception:
+        pass
+
     cmd = [
         "ffmpeg", "-y",
         *inputs,
@@ -665,6 +680,7 @@ def build_final_composite(
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
         "-c:a", "copy",
+        *(["-t", f"{base_dur:.3f}"] if base_dur else []),
         "-movflags", "+faststart",
         str(out_path),
     ]
