@@ -1,0 +1,64 @@
+canvas {
+  width = 240
+  height = 200
+}
+
+colors {
+  lightGray = rgba(.8, .8, .8, 1.)
+  mediumGray = rgba(.6, .6, .6, 1.)
+  darkGray = rgba(.4, .4, .4, 1.)
+}
+
+global {
+  scalar tableWidth = 180
+  scalar tableHeight = 180
+  scalar boxPadding = 2.0
+}
+
+forall Element g {
+  scalar m = match_id
+  scalar n = match_total
+  scalar g.t = m / n
+  scalar g.u = (g.t - 0.5) * global.tableHeight
+  scalar g.v = ((1. - g.t) - 0.5) * global.tableWidth
+  scalar g.width = global.tableWidth / n
+  scalar g.height = global.tableHeight / n
+
+  scalar T = .1 + .8 * (1. - g.t)
+  scalar s = max(0, min(1, T))
+  scalar g.R = 1 - sqr(1 - max(0, min(1, 3 * T)))
+  scalar g.G = 3. * s * s - 2. * s * s * s
+  scalar g.B = max(0, min(1, 3 * T - 2))
+  color g.boxColor = rgba(g.R, g.G, g.B, .75)
+  color g.labelColor = rgba(.75 * g.R, .75 * g.G, .75 * g.B, 1.)
+
+  shape g.rowLabel = Equation {
+    string: g.label
+    center: (-global.tableWidth / 2, g.v)
+    fontSize: "8px"
+    fillColor: colors.darkGray
+  }
+  shape g.colLabel = Equation {
+    string: g.label
+    center: (g.u, global.tableHeight / 2)
+    fontSize: "8px"
+    fillColor: colors.darkGray
+  }
+}
+
+forall repeatable Element a; Element b; Element c
+where IsProduct(a, b, c) {
+  shape productShape = Rectangle {
+    center: (b.u, c.v)
+    width: a.width - global.boxPadding
+    height: a.height - global.boxPadding
+    cornerRadius: 2.0
+    fillColor: a.boxColor
+  }
+  shape productText = Equation {
+    string: a.label
+    center: productShape.center
+    fontSize: "8px"
+    fillColor: a.labelColor
+  }
+}

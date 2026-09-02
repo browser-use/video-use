@@ -16,9 +16,12 @@ Try video-use in [Browser Use Cloud](https://cloud.browser-use.com/v4?utm_campai
 - **Auto color grades** every segment (warm cinematic, neutral punch, or any custom ffmpeg chain)
 - **30ms audio fades** at every cut so you never hear a pop
 - **Burns subtitles** in your style — 2-word UPPERCASE chunks by default, fully customizable
-- **Generates animation overlays** via [HyperFrames](https://github.com/heygen-com/hyperframes), [Remotion](https://www.remotion.dev/), [Manim](https://www.manim.community/), or PIL — spawned in parallel sub-agents, one per animation
+- **Generates animation and illustration overlays** via [HyperFrames](https://github.com/heygen-com/hyperframes), [Remotion](https://www.remotion.dev/), [Manim](https://www.manim.community/), [Penrose](https://penrose.cs.cmu.edu/), [CeTZ](https://typst.app/universe/package/cetz), or PIL — chosen per visual beat
 - **Self-evaluates the rendered output** at every cut boundary before showing you anything
 - **Persists session memory** in `project.md` so next week's session picks up where you left off
+- **Renders every delivery format from one edit** — 16:9 and 9:16 with per-format loudness targets and keyframed reframing, validated before any render starts
+- **Finds real footage for explainers** — searches public video, inspects exact moments, records provenance, and places footage in split or picture-in-picture compositions that never cover captions
+- **Checks generated layouts** — text and component collisions fail the render before you see it
 
 ## Setup prompt
 
@@ -45,7 +48,7 @@ And in the session:
 
 > edit these into a launch video
 
-It inventories the sources, proposes a strategy, waits for your OK, then produces `edit/final.mp4` next to your sources. All outputs live in `<videos_dir>/edit/` — the skill directory stays clean.
+It inventories the sources, proposes a strategy, waits for your OK, then produces `edit/final.mp4` next to your sources. Ask for an explainer on a topic with no footage at all and it writes narration, builds the visuals, and captions them from the spoken words. All outputs live in `<videos_dir>/edit/` — the skill directory stays clean.
 
 ## Manual install
 
@@ -61,7 +64,9 @@ ln -sfn ~/Developer/video-use ~/.claude/skills/video-use        # Claude Code
 cd ~/Developer/video-use
 uv sync                         # or: pip install -e .
 brew install ffmpeg             # required
+brew install ffmpeg-full        # caption burn-in needs libass
 brew install yt-dlp             # optional, for downloading online sources
+brew install typst              # optional, CeTZ illustrations
 
 # 3. Add your ElevenLabs API key
 cp .env.example .env
@@ -107,6 +112,6 @@ The self-eval loop runs `timeline_view` on the _rendered output_ at every cut bo
 2. **Audio is primary, visuals follow.** Cuts come from speech boundaries and silence gaps.
 3. **Ask → confirm → execute → self-eval → persist.** Never touch the cut without strategy approval.
 4. **Zero assumptions about content type.** Look, ask, then edit.
-5. **12 hard rules, artistic freedom elsewhere.** Production-correctness is non-negotiable. Taste isn't.
+5. **14 hard rules, artistic freedom elsewhere.** Production-correctness is non-negotiable. Taste isn't.
 
 See [`SKILL.md`](./SKILL.md) for the full production rules and editing craft.

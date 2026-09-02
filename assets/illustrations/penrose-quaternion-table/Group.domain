@@ -1,0 +1,4 @@
+type Element
+predicate IsIdentity(Element e)
+predicate IsGenerator(Element g)
+predicate IsProduct(Element a, Element b, Element c)

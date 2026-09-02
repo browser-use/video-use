@@ -1,0 +1,84 @@
+Element g1
+Element g2
+Element g3
+Element g4
+Element g5
+Element g6
+Element g7
+Element g8
+IsIdentity(g1)
+IsGenerator(g2)
+IsGenerator(g3)
+IsProduct(g1,g1,g1)
+IsProduct(g2,g1,g2)
+IsProduct(g3,g1,g3)
+IsProduct(g4,g1,g4)
+IsProduct(g5,g1,g5)
+IsProduct(g6,g1,g6)
+IsProduct(g7,g1,g7)
+IsProduct(g8,g1,g8)
+IsProduct(g2,g2,g1)
+IsProduct(g5,g2,g2)
+IsProduct(g4,g2,g3)
+IsProduct(g7,g2,g4)
+IsProduct(g6,g2,g5)
+IsProduct(g1,g2,g6)
+IsProduct(g8,g2,g7)
+IsProduct(g3,g2,g8)
+IsProduct(g3,g3,g1)
+IsProduct(g8,g3,g2)
+IsProduct(g5,g3,g3)
+IsProduct(g2,g3,g4)
+IsProduct(g7,g3,g5)
+IsProduct(g4,g3,g6)
+IsProduct(g1,g3,g7)
+IsProduct(g6,g3,g8)
+IsProduct(g4,g4,g1)
+IsProduct(g3,g4,g2)
+IsProduct(g6,g4,g3)
+IsProduct(g5,g4,g4)
+IsProduct(g8,g4,g5)
+IsProduct(g7,g4,g6)
+IsProduct(g2,g4,g7)
+IsProduct(g1,g4,g8)
+IsProduct(g5,g5,g1)
+IsProduct(g6,g5,g2)
+IsProduct(g7,g5,g3)
+IsProduct(g8,g5,g4)
+IsProduct(g1,g5,g5)
+IsProduct(g2,g5,g6)
+IsProduct(g3,g5,g7)
+IsProduct(g4,g5,g8)
+IsProduct(g6,g6,g1)
+IsProduct(g1,g6,g2)
+IsProduct(g8,g6,g3)
+IsProduct(g3,g6,g4)
+IsProduct(g2,g6,g5)
+IsProduct(g5,g6,g6)
+IsProduct(g4,g6,g7)
+IsProduct(g7,g6,g8)
+IsProduct(g7,g7,g1)
+IsProduct(g4,g7,g2)
+IsProduct(g1,g7,g3)
+IsProduct(g6,g7,g4)
+IsProduct(g3,g7,g5)
+IsProduct(g8,g7,g6)
+IsProduct(g5,g7,g7)
+IsProduct(g2,g7,g8)
+IsProduct(g8,g8,g1)
+IsProduct(g7,g8,g2)
+IsProduct(g2,g8,g3)
+IsProduct(g1,g8,g4)
+IsProduct(g4,g8,g5)
+IsProduct(g3,g8,g6)
+IsProduct(g6,g8,g7)
+IsProduct(g5,g8,g8)
+
+Label g1 $1$
+Label g2 $i$
+Label g3 $j$
+Label g4 $k$
+Label g5 $-1$
+Label g6 $-i$
+Label g7 $-j$
+Label g8 $-k$

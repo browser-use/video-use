@@ -33,9 +33,12 @@ import requests
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 
 
+# read the elevenlabs api key from a dotenv file or the environment and exit if neither has it
 def load_api_key() -> str:
+    # check the repo root dotenv first then the working directory
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
+            # parse key equals value lines and strip surrounding quotes from the value
             for line in candidate.read_text().splitlines():
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
@@ -49,6 +52,7 @@ def load_api_key() -> str:
     return v
 
 
+# count the audio streams in a container so multi track recordings can be flagged
 def count_audio_tracks(video_path: Path) -> int:
     """How many audio streams the container holds."""
     out = subprocess.run(
@@ -59,6 +63,7 @@ def count_audio_tracks(video_path: Path) -> int:
     return len([ln for ln in out.stdout.splitlines() if ln.strip()])
 
 
+# measure the peak level of a wav in dbfs so a silent track is caught before upload
 def peak_dbfs(wav_path: Path) -> float:
     """Peak level of a 16-bit PCM wav, in dBFS. -inf for digital silence."""
     peak = 0
@@ -71,6 +76,7 @@ def peak_dbfs(wav_path: Path) -> float:
     return 20 * math.log10(peak / 32768) if peak > 0 else float("-inf")
 
 
+# use ffmpeg to write a mono 16khz pcm wav from the video
 def extract_audio(video_path: Path, dest: Path, audio_track: int = 0) -> None:
     cmd = [
         "ffmpeg", "-y", "-i", str(video_path),
@@ -81,6 +87,7 @@ def extract_audio(video_path: Path, dest: Path, audio_track: int = 0) -> None:
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+# upload the wav to the scribe endpoint with verbatim settings and return the parsed json
 def call_scribe(
     audio_path: Path,
     api_key: str,
@@ -107,12 +114,14 @@ def call_scribe(
             timeout=1800,
         )
 
+    # any non 200 response is treated as a hard failure with a trimmed body for context
     if resp.status_code != 200:
         raise RuntimeError(f"Scribe returned {resp.status_code}: {resp.text[:500]}")
 
     return resp.json()
 
 
+# resolve where a transcript lands with the track number in the name for anything but track zero
 def transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
     """Where a video's transcript lands.
 
@@ -125,6 +134,7 @@ def transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
     return edit_dir / "transcripts" / f"{video.stem}{suffix}.json"
 
 
+# transcribe one video into the transcripts folder and return the json path reusing a cached file if present
 def transcribe_one(
     video: Path,
     edit_dir: Path,
@@ -189,6 +199,7 @@ def transcribe_one(
     return out_path
 
 
+# cli entry point that resolves the video and edit directory then runs a single transcription
 def main() -> None:
     ap = argparse.ArgumentParser(description="Transcribe a video with ElevenLabs Scribe")
     ap.add_argument("video", type=Path, help="Path to video file")

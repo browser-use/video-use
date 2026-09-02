@@ -50,12 +50,16 @@ command -v uv >/dev/null && uv sync || pip install -e .
 
 ### 3. Install ffmpeg (+ optional yt-dlp)
 
-`ffmpeg` and `ffprobe` are hard requirements. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation engines such as HyperFrames, Remotion, and Manim are installed lazily the first time a project actually needs them.
+`ffmpeg` and `ffprobe` are hard requirements. Burning SRT/ASS captions also
+requires an ffmpeg build with `libass`; `render.py` automatically finds
+Homebrew's keg-only `ffmpeg-full` when the default build lacks it. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation and illustration engines such as HyperFrames, Remotion, Manim, Penrose, and CeTZ are installed lazily the first time a project actually needs them. Penrose's pinned Roger CLI is cached by `render_illustration.py`; CeTZ requires the Typst CLI.
 
 ```bash
 # macOS
 command -v ffmpeg >/dev/null || brew install ffmpeg
+ffmpeg -hide_banner -filters 2>/dev/null | grep -q ' subtitles ' || brew install ffmpeg-full  # only if the default build lacks libass
 command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
+command -v typst >/dev/null || brew install typst       # optional, CeTZ only
 
 # Debian / Ubuntu
 # sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -156,7 +160,7 @@ Tell the user, in one short message:
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
 - `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
-- Node.js/npm are only needed for HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
-- HyperFrames, Remotion, and Manim are optional animation engines. Don't install or prefer one globally during setup; pick the engine per animation slot in `SKILL.md`. HyperFrames can run through `npx --yes hyperframes ...` in the slot directory. Remotion can be scaffolded with `npx create-video@latest` or installed inside the slot before rendering.
+- Node.js/npm are needed for HyperFrames, Remotion, or Penrose slots. HyperFrames currently requires Node.js 22+.
+- HyperFrames, Remotion, Manim, Penrose, and CeTZ are optional visual engines. Don't install or prefer one globally during setup; pick the engine per slot in `SKILL.md`. HyperFrames can run through `npx --yes hyperframes ...` in the slot directory. Remotion can be scaffolded with `npx create-video@latest` or installed inside the slot before rendering. Penrose is cached automatically on first render. CeTZ needs `typst` on `PATH`.
 - Never run transcription as part of install verification unless the user explicitly asks — Scribe costs real money.
 - If the user is on Linux without a package manager Claude recognizes, print the manual `ffmpeg` install URL and wait rather than guessing.
