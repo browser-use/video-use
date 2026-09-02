@@ -29,6 +29,16 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 
+# Console output uses arrows (→) below. On Windows, stdout's default
+# encoding is the legacy console codepage (e.g. cp1252), which can't encode
+# them and raises UnicodeEncodeError. Force UTF-8 regardless of platform or
+# locale so the same prints work unmodified on Windows, macOS, and Linux.
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory
 except Exception:
@@ -50,7 +60,12 @@ except Exception:
 # every major vertical-video platform. Do not drop this below ~75 without a
 # specific reason.
 SUB_FORCE_STYLE = (
-    "FontName=Helvetica,FontSize=18,Bold=1,"
+    # Helvetica isn't installed on Windows, so libass/fontconfig had to
+    # guess a substitute (Arial-BoldMT) at render time. Arial ships as a
+    # core system font on Windows and macOS, so naming it directly removes
+    # that guesswork on both. Linux distros without Arial still get a
+    # graceful fontconfig substitution, same as before.
+    "FontName=Arial,FontSize=18,Bold=1,"
     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,"
     "BorderStyle=1,Outline=2,Shadow=0,"
     "Alignment=2,MarginV=90"
@@ -484,7 +499,10 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
         lines.append(f"{_srt_timestamp(a)} --> {_srt_timestamp(b)}")
         lines.append(t)
         lines.append("")
-    out_path.write_text("\n".join(lines))
+    # Explicit UTF-8: Path.write_text() otherwise falls back to
+    # locale.getpreferredencoding(), which is cp1252 on Windows and would
+    # mangle Spanish accents/ñ in the burned-in captions.
+    out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"master SRT → {out_path.name} ({len(entries)} cues)")
 
 
@@ -641,7 +659,16 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        # ffmpeg's filtergraph parser treats both ':' and '\' as syntax
+        # (option separator / escape char). On Windows, an absolute path
+        # like C:\Users\...\master.srt trips both at once — escaping only
+        # the colon leaves the raw backslashes to break the parser. Normalize
+        # to forward slashes first (ffmpeg accepts them on every platform,
+        # including Windows), then escape the drive-letter colon and any
+        # literal quotes. POSIX paths have no backslashes, so the replace is
+        # a no-op there and this stays identical to the prior behavior.
+        subs_abs = str(subtitles_path.resolve()).replace("\\", "/")
+        subs_abs = subs_abs.replace(":", r"\:").replace("'", r"\'")
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )
