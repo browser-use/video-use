@@ -32,9 +32,13 @@ from pathlib import Path
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory
 except Exception:
+    # fallback that only knows the identity grade when the grade helper is unavailable
+    # fallback that only knows the identity grade when the grade helper is unavailable
     def get_preset(name: str) -> str:
         return ""
 
+    # fallback that skips auto grading when the grade helper is unavailable
+    # fallback that skips auto grading when the grade helper is unavailable
     def auto_grade_for_clip(video, start=0.0, duration=None, verbose=False):  # type: ignore
         return "eq=contrast=1.03:saturation=0.98", {}
 
@@ -59,12 +63,14 @@ SUB_FORCE_STYLE = (
 # -------- Helpers ------------------------------------------------------------
 
 
+# run a command with check and print an abbreviated version unless quiet
 def run(cmd: list[str], quiet: bool = False) -> None:
     if not quiet:
         print(f"  $ {' '.join(str(c) for c in cmd[:6])}{' …' if len(cmd) > 6 else ''}")
     subprocess.run(cmd, check=True)
 
 
+# turn the edl grade field into a filter string or the auto sentinel
 def resolve_grade_filter(grade_field: str | None) -> str:
     """The EDL's 'grade' field can be a preset name, a raw ffmpeg filter, or 'auto'.
 
@@ -85,6 +91,7 @@ def resolve_grade_filter(grade_field: str | None) -> str:
     return grade_field
 
 
+# resolve a path relative to base unless it is already absolute
 def resolve_path(maybe_path: str, base: Path) -> Path:
     """Resolve a path that may be absolute or relative to `base`."""
     p = Path(maybe_path)
@@ -118,6 +125,7 @@ TONEMAP_CHAIN = (
 )
 
 
+# detect pq or hlg transfer metadata on the first video stream
 def is_hdr_source(video: Path) -> bool:
     """Return True if the source uses a PQ or HLG transfer function."""
     try:
@@ -132,6 +140,7 @@ def is_hdr_source(video: Path) -> bool:
         return False
 
 
+# report whether the first video stream is taller than it is wide
 def is_portrait_source(video: Path) -> bool:
     """Return True if the displayed video is portrait, including rotation."""
     try:
@@ -172,6 +181,7 @@ def is_portrait_source(video: Path) -> bool:
         return False
 
 
+# validate an fps argument and return it as a reduced rational string
 def parse_fps(value: str) -> str:
     """Validate and canonicalize an ffmpeg frame rate."""
     text = value.strip()
@@ -198,6 +208,7 @@ def parse_fps(value: str) -> str:
     return f"{rate.numerator}/{rate.denominator}"
 
 
+# read the source frame rate from ffprobe preferring the average rate
 def probe_source_fps(video: Path) -> str | None:
     """Return an ffmpeg-ready source rate, preferring the average frame rate.
 
@@ -216,6 +227,7 @@ def probe_source_fps(video: Path) -> str | None:
         streams = json.loads(out.stdout).get("streams") or []
         if not streams:
             return None
+        # take the first usable rate and skip zero or unparsable values
         for field in ("avg_frame_rate", "r_frame_rate"):
             value = streams[0].get(field)
             if value and value != "0/0":
@@ -231,6 +243,7 @@ def probe_source_fps(video: Path) -> str | None:
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
 
 
+# encode one edl range as its own mp4 with tone mapping scaling grade and audio fades applied
 def extract_segment(
     source: Path,
     seg_start: float,
@@ -253,12 +266,14 @@ def extract_segment(
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # scale by height for portrait sources so orientation is preserved
     portrait = is_portrait_source(source)
     if draft:
         scale = "scale=-2:1280" if portrait else "scale=1280:-2"
     else:
         scale = "scale=-2:1920" if portrait else "scale=1920:-2"
 
+    # tone map hdr first then scale then grade
     vf_parts: list[str] = []
     if is_hdr_source(source):
         vf_parts.append(TONEMAP_CHAIN)
@@ -300,6 +315,7 @@ def extract_segment(
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
+# extract every edl range into graded segment files sharing one output frame rate
 def extract_all_segments(
     edl: dict,
     edit_dir: Path,
@@ -368,10 +384,12 @@ def extract_all_segments(
 # -------- Lossless concat ----------------------------------------------------
 
 
+# join segment files losslessly with the concat demuxer
 def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
     """Lossless concat via the concat demuxer. No re-encode."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
+    # the concat demuxer reads a text file listing each segment path
     concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
 
     cmd = [
@@ -393,6 +411,7 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
 PUNCT_BREAK = set(".,!?;:")
 
 
+# format seconds as an srt timestamp with millisecond precision
 def _srt_timestamp(seconds: float) -> str:
     total_ms = int(round(seconds * 1000))
     h, rem = divmod(total_ms, 3600_000)
@@ -401,6 +420,7 @@ def _srt_timestamp(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
+# return transcript words that overlap the given source time range
 def _words_in_range(transcript: dict, t_start: float, t_end: float) -> list[dict]:
     out: list[dict] = []
     for w in transcript.get("words", []):
@@ -410,12 +430,14 @@ def _words_in_range(transcript: dict, t_start: float, t_end: float) -> list[dict
         we = w.get("end")
         if ws is None or we is None:
             continue
+        # keep only words that overlap the range
         if we <= t_start or ws >= t_end:
             continue
         out.append(w)
     return out
 
 
+# build an output timeline srt from per source transcripts using two word uppercase chunks
 def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
     """Build an output-timeline SRT from per-source transcripts.
 
@@ -461,6 +483,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             chunks.append(current)
 
         for chunk in chunks:
+            # clamp chunk times to the segment then shift them onto the output timeline
             local_start = max(seg_start, chunk[0].get("start", seg_start))
             local_end = min(seg_end, chunk[-1].get("end", seg_end))
             out_start = max(0.0, local_start - seg_start) + seg_offset
@@ -498,6 +521,7 @@ LOUDNORM_TP = -1.0
 LOUDNORM_LRA = 11.0
 
 
+# run the loudnorm first pass and parse its json measurement from stderr
 def measure_loudness(video_path: Path) -> dict[str, str] | None:
     """Run ffmpeg loudnorm first pass and parse the JSON measurement.
 
@@ -532,6 +556,7 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
     return data
 
 
+# normalize audio with two pass loudnorm or a one pass approximation in preview mode
 def apply_loudnorm_two_pass(
     input_path: Path,
     output_path: Path,
@@ -597,6 +622,7 @@ def apply_loudnorm_two_pass(
 # -------- Final compositing (Rule 1 + Rule 4) -------------------------------
 
 
+# composite overlays onto the base and burn subtitles last in one ffmpeg filter graph
 def build_final_composite(
     base_path: Path,
     overlays: list[dict],
@@ -676,6 +702,7 @@ def build_final_composite(
 # -------- Main ---------------------------------------------------------------
 
 
+# command line entry point that validates the edl and runs the full pipeline
 def main() -> None:
     ap = argparse.ArgumentParser(description="Render a video from an EDL")
     ap.add_argument("edl", type=Path, help="Path to edl.json")
