@@ -50,11 +50,14 @@ command -v uv >/dev/null && uv sync || pip install -e .
 
 ### 3. Install ffmpeg (+ optional yt-dlp)
 
-`ffmpeg` and `ffprobe` are hard requirements. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation engines such as HyperFrames, Remotion, and Manim are installed lazily the first time a project actually needs them.
+`ffmpeg` and `ffprobe` are hard requirements. Burning SRT/ASS captions also
+requires an ffmpeg build with `libass`; `render.py` automatically finds
+Homebrew's keg-only `ffmpeg-full` when the default build lacks it. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation engines such as HyperFrames, Remotion, and Manim are installed lazily the first time a project actually needs them.
 
 ```bash
 # macOS
 command -v ffmpeg >/dev/null || brew install ffmpeg
+ffmpeg -hide_banner -filters 2>/dev/null | grep -q ' subtitles ' || brew install ffmpeg-full  # only if the default build lacks libass
 command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 
 # Debian / Ubuntu

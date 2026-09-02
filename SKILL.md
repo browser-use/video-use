@@ -31,6 +31,7 @@ These are the things where deviation produces silent failures or broken output. 
 10. **Parallel sub-agents for multiple animations.** Never sequential. Spawn N at once via the `Agent` tool; total wall time ≈ slowest one.
 11. **Strategy confirmation before execution.** Never touch the cut until the user has approved the plain-English plan.
 12. **All session outputs in `<videos_dir>/edit/`.** Never write inside the `video-use/` project directory.
+13. **Captions transcribe audible speech only.** Every cue must come from timestamped human or generated speech. Music/SFX-only and silent videos have no subtitle track, no `captions` block, and no baked caption rail. Marketing copy is designed scene typography, never a fabricated transcript.
 
 Everything else in this document is a worked example. Deviate whenever the material calls for it.
 
@@ -48,7 +49,7 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
     ├── transcripts/<name>.json  ← cached raw Scribe JSON
     ├── animations/slot_<id>/    ← per-animation source + render + reasoning
     ├── clips_graded/            ← per-segment extracts with grade + fades
-    ├── master.srt               ← output-timeline subtitles
+    ├── master.srt | master.ass  ← output-timeline subtitles
     ├── downloads/               ← yt-dlp outputs
     ├── verify/                  ← debug frames / timeline PNGs
     ├── preview.mp4
@@ -60,7 +61,8 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 First-time install lives in `install.md` (clone, deps, ffmpeg, skill registration, API key). Don't re-run it every session; on cold start just verify:
 
 - `ELEVENLABS_API_KEY` resolves — either in the environment or in `.env` at the video-use repo root. If missing, ask the user to paste one and write it to `.env` (never to the user's `<videos_dir>`).
-- `ffmpeg` + `ffprobe` on PATH.
+- `ffmpeg` + `ffprobe` on PATH. Caption burn-in requires libass; on macOS,
+  `render.py` automatically falls back to Homebrew's `ffmpeg-full` keg.
 - Python deps installed (`uv sync` or `pip install -e .` inside the repo).
 - Node.js + npm available if the session needs HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
 - `yt-dlp`, HyperFrames, Remotion, Manim installed only on first use.
@@ -75,7 +77,8 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
-- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
+- **`captions.py <alignment.json> -o master.ass`** — convert ElevenLabs character timestamps or generic word timestamps into compact captions inside a bottom safe rail.
+- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for an evaluable 1080p render. `--all-deliverables` renders every declared aspect/loudness target. `--preflight-overlays` checks overlay placement before a full render. `--build-subtitles` generates master.srt inline.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
@@ -93,6 +96,7 @@ For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a su
    - Waveform spike at the boundary (audio pop that slipped past the 30ms fade)
    - Subtitle hidden behind an overlay (Rule 1 violation)
    - Overlay misaligned or showing wrong frames (Rule 4 violation)
+   - Captions without matching audible words, or speech captions with missing words
 
    Also sample: first 2s, last 2s, and 2–3 mid-points — check grade consistency, subtitle readability, overall coherence. Run `ffprobe` on the output to verify duration matches the EDL expectation.
 
@@ -176,6 +180,15 @@ For anything else — portraiture, nature, product, music video, documentary —
 Hard rules: apply **per-segment during extraction** (not post-concat, which re-encodes twice). Never go aggressive without testing skin tones.
 
 ## Subtitles (when requested)
+
+First verify that the final audio contains audible speech and that timestamped
+transcript or alignment JSON exists. Subtitle text must be derived from those
+spoken words. Never invent caption sentences to summarize a music-only video.
+When captions are used, EDL version 2 requires `captions.provenance`: use
+`source_transcript` for recorded speech, `narration_alignment` for generated
+voiceover, or `provided_transcript` for a transcript supplied with the project.
+For generated narration, convert the alignment with `helpers/captions.py`, which
+writes `.ass` cues inside the bottom caption rail declared as `captions.safe_region`.
 
 Subtitles have three dimensions worth reasoning about: **chunking** (1/2/3/sentence per line), **case** (UPPER/Title/Natural), and **placement** (margin from bottom). The right combo depends on content.
 
@@ -269,7 +282,7 @@ Match the source unless the user asked for something specific. Common targets: `
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "sources": {"C0103": "/abs/path/C0103.MP4", "C0108": "/abs/path/C0108.MP4"},
   "ranges": [
     {"source": "C0103", "start": 2.42, "end": 6.85,
@@ -279,14 +292,41 @@ Match the source unless the user asked for something specific. Common targets: `
   ],
   "grade": "warm_cinematic",
   "overlays": [
-    {"file": "edit/animations/slot_1/render.mp4", "start_in_output": 0.0, "duration": 5.0}
+    {"id": "slot_1", "file": "animations/slot_1/render.mp4",
+     "start_in_output": 0.0, "duration": 5.0, "composition": "cutaway", "fit": "cover"},
+    {"id": "illustration_02", "file": "animations/slot_2/render.mp4",
+     "start_in_output": 12.0, "duration": 4.0,
+     "rect": {"x": 0.04, "y": 0.10, "width": 0.44, "height": 0.66}}
   ],
-  "subtitles": "edit/master.srt",
+  "protected_regions": [
+    {"owner": "base_matrix", "start_in_output": 30.0, "duration": 8.0,
+     "rect": {"x": 0.08, "y": 0.18, "width": 0.84, "height": 0.56}}
+  ],
+  "subtitles": "master.ass",
+  "captions": {
+    "provenance": {
+      "kind": "source_transcript",
+      "files": ["transcripts/C0103.json", "transcripts/C0108.json"]
+    },
+    "safe_region": {"x": 0.0, "y": 0.84, "width": 1.0, "height": 0.16}
+  },
   "total_duration_s": 87.4
 }
 ```
 
-`grade` is a preset name or raw ffmpeg filter. `overlays` are rendered animation clips. `subtitles` is optional and applied LAST.
+`grade` is a preset name or raw ffmpeg filter. Relative `file` and `subtitles`
+paths resolve from the EDL's directory. Overlay and protected-region rectangles
+use normalized frame coordinates; entries without `composition`, `layout`, or
+`rect` keep legacy full-frame behavior, but new explainer overlays should declare
+a composition. `.ass` subtitle styles are preserved; SRT receives the default
+force style. Subtitles are always applied LAST. Version 2 rejects subtitle or
+caption declarations without timestamped speech evidence. Version 1 remains
+renderable for legacy projects, but new agent-authored handoffs must use
+version 2.
+
+Read `references/overlays.md` for compositions, layouts, protected regions, and
+the overlay preflight gate. Read `references/deliverables.md` for multi-format
+outputs, reframe tracks, and per-deliverable loudness targets.
 
 ## Memory — `project.md`
 

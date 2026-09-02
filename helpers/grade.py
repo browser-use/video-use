@@ -63,6 +63,7 @@ PRESETS: dict[str, str] = {
 }
 
 
+# look up the ffmpeg filter string for a named preset and fail loudly on unknown names
 def get_preset(name: str) -> str:
     """Return the ffmpeg filter string for a preset name. Empty string for 'none'."""
     if name not in PRESETS:
@@ -75,6 +76,7 @@ def get_preset(name: str) -> str:
 # -------- Auto grade (data-driven, per-clip) --------------------------------
 
 
+# run ffmpeg signalstats over a sampled range and average the luma and saturation readings into normalized stats
 def _sample_frame_stats(
     video: Path,
     start: float,
@@ -121,6 +123,7 @@ def _sample_frame_stats(
         sat_avgs: list[float] = []
         bit_depth: int = 8
 
+        # pull the numeric value after the last equals sign on a metadata line
         def _parse_value(line: str) -> float | None:
             try:
                 return float(line.rsplit("=", 1)[1])
@@ -175,6 +178,7 @@ def _sample_frame_stats(
         Path(metadata_path).unlink(missing_ok=True)
 
 
+# analyze a clip range and derive a bounded corrective eq filter with no creative color shift
 def auto_grade_for_clip(
     video: Path,
     start: float = 0.0,
@@ -271,8 +275,10 @@ def auto_grade_for_clip(
     return filter_string, stats
 
 
+# run ffmpeg to write the graded output or stream copy when the filter is empty
 def apply_grade(input_path: Path, output_path: Path, filter_string: str) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # an empty filter means no grade so copy streams without re encoding
     if not filter_string:
         cmd = [
             "ffmpeg", "-y", "-i", str(input_path),
@@ -291,6 +297,7 @@ def apply_grade(input_path: Path, output_path: Path, filter_string: str) -> None
     subprocess.run(cmd, check=True)
 
 
+# cli entry point that handles preset listing analysis and the normal grade run
 def main() -> None:
     ap = argparse.ArgumentParser(description="Apply a color grade via ffmpeg filter chain")
     ap.add_argument("input", type=Path, nargs="?", help="Input video")
