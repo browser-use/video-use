@@ -21,6 +21,12 @@ import sys
 from pathlib import Path
 
 
+def configure_stdout() -> None:
+    """Keep progress output safe when the locale encoding is not UTF-8."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
 def format_time(seconds: float) -> str:
     """Format a time in seconds as "NNN.NN" with fixed 6-char width for alignment."""
     return f"{seconds:06.2f}"
@@ -163,6 +169,7 @@ def render_markdown(entries: list[tuple[str, float, list[dict]]], silence_thresh
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Pack Scribe transcripts into takes_packed.md")
     ap.add_argument("--edit-dir", type=Path, required=True, help="Edit directory containing transcripts/")
     ap.add_argument(

@@ -35,6 +35,12 @@ import tempfile
 from pathlib import Path
 
 
+def configure_stdout() -> None:
+    """Keep progress output safe when the locale encoding is not UTF-8."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
 PRESETS: dict[str, str] = {
     # Subtle baseline — barely perceptible cleanup. No color shift.
     # Use when auto-analysis isn't available or when you want a safe floor.
@@ -292,6 +298,7 @@ def apply_grade(input_path: Path, output_path: Path, filter_string: str) -> None
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Apply a color grade via ffmpeg filter chain")
     ap.add_argument("input", type=Path, nargs="?", help="Input video")
     ap.add_argument("-o", "--output", type=Path, help="Output video")

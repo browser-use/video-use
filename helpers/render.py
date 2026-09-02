@@ -29,6 +29,13 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 
+
+def configure_stdout() -> None:
+    """Keep progress output safe when the locale encoding is not UTF-8."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory
 except Exception:
@@ -677,6 +684,7 @@ def build_final_composite(
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Render a video from an EDL")
     ap.add_argument("edl", type=Path, help="Path to edl.json")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output video path")

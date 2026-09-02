@@ -23,6 +23,12 @@ from pathlib import Path
 from transcribe import load_api_key, transcribe_one, transcript_path
 
 
+def configure_stdout() -> None:
+    """Keep progress output safe when the locale encoding is not UTF-8."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
 
 
@@ -35,6 +41,7 @@ def find_videos(videos_dir: Path) -> list[Path]:
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Parallel batch transcription of a videos directory")
     ap.add_argument("videos_dir", type=Path, help="Directory containing source videos")
     ap.add_argument(
