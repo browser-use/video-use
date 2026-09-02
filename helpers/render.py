@@ -26,6 +26,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from fractions import Fraction
 from pathlib import Path
 
@@ -371,8 +372,17 @@ def extract_all_segments(
 def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
     """Lossless concat via the concat demuxer. No re-encode."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    concat_list = edit_dir / "_concat.txt"
-    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    edit_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=edit_dir,
+        prefix="_concat_",
+        suffix=".txt",
+        delete=False,
+    ) as fh:
+        fh.write("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+        concat_list = Path(fh.name)
 
     cmd = [
         "ffmpeg", "-y",
@@ -383,8 +393,10 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
         str(out_path),
     ]
     print(f"concat → {out_path.name}")
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    concat_list.unlink(missing_ok=True)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    finally:
+        concat_list.unlink(missing_ok=True)
 
 
 # -------- Master SRT (Rule 5) ------------------------------------------------
