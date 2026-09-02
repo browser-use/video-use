@@ -128,8 +128,11 @@ class LongVideo(Scene):
         # ... closing ...
 ```
 
-Render individual sections: `manim --save_sections script.py LongVideo`
-This outputs separate video files per section — useful for long videos where you want to re-render only one part.
+`manim --save_sections script.py LongVideo` saves section videos and metadata for
+inspection. Targeted authoring still selects the whole scene class; do not
+promise unsupported arbitrary section-only rendering. Use
+`scripts/preview_scene.py` to preview selected chapter classes and inspect their
+saved section metadata.
 
 ## manim-voiceover Plugin (Recommended for Narrated Videos)
 

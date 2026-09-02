@@ -18,6 +18,7 @@ Try video-use in [Browser Use Cloud](https://cloud.browser-use.com/v4?utm_campai
 - **Burns subtitles** in your style — 2-word UPPERCASE chunks by default, fully customizable
 - **Generates animation overlays** via [HyperFrames](https://github.com/heygen-com/hyperframes), [Remotion](https://www.remotion.dev/), [Manim](https://www.manim.community/), or PIL — spawned in parallel sub-agents, one per animation
 - **Self-evaluates the rendered output** at every cut boundary before showing you anything
+- **Builds original narrated explainers from a topic** — semantic Manim teaching assets, chapter previews, generated narration with word-timed captions
 - **Persists session memory** in `project.md` so next week's session picks up where you left off
 
 ## Setup prompt
@@ -66,6 +67,9 @@ brew install yt-dlp             # optional, for downloading online sources
 # 3. Add your ElevenLabs API key
 cp .env.example .env
 $EDITOR .env                    # ELEVENLABS_API_KEY=...
+
+# 4. Optional: Manim for original explainers built from a topic
+uv sync --extra animations
 ```
 
 ## How it works

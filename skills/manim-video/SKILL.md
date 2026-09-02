@@ -1,7 +1,7 @@
 ---
 name: manim-video
-description: "Production pipeline for mathematical and technical animations using Manim Community Edition. Creates 3Blue1Brown-style explainer videos, algorithm visualizations, equation derivations, architecture diagrams, and data stories. Use when users request: animated explanations, math animations, concept visualizations, algorithm walkthroughs, technical explainers, 3Blue1Brown style videos, or any programmatic animation with geometric/mathematical content."
-version: 1.0.0
+description: "Production pipeline for original mathematical and technical animations using Manim Community Edition. Creates semantic explainers, algorithm visualizations, equation derivations, architecture diagrams, and data stories. Use when users request animated explanations, math animations, concept visualizations, algorithm walkthroughs, technical explainers, or programmatic geometric and mathematical animation."
+version: 2.0.0
 ---
 
 # Manim Video Production Pipeline
@@ -16,11 +16,16 @@ This is educational cinema. Every frame teaches. Every animation reveals structu
 
 **First-render excellence is non-negotiable.** The output must be visually clear and aesthetically cohesive without revision rounds. If something looks cluttered, poorly timed, or like "AI-generated slides," it is wrong.
 
-**Opacity layering directs attention.** Never show everything at full brightness. Primary elements at 1.0, contextual elements at 0.4, structural elements (axes, grids) at 0.15. The brain processes visual salience in layers.
+**Continuity carries meaning.** Keep important objects alive across multiple teaching beats. Transform their state, update their linked representations together, and move the camera or dim context to direct attention. Reset an object only when that reset teaches something.
 
-**Breathing room.** Every animation needs `self.wait()` after it. The viewer needs time to absorb what just appeared. Never rush from one animation to the next. A 2-second pause after a key reveal is never wasted.
+**Breathing room.** Pause after a meaningful reveal for as long as the viewer needs to comprehend it. Every hold must serve reading, comparison, prediction, or payoff rather than mechanically following every animation.
 
 **Cohesive visual language.** All scenes share a color palette, consistent typography sizing, matching animation speeds. A technically correct video where every scene uses random different colors is an aesthetic failure.
+
+**Narration is part of a topic-only explainer.** Unless the user explicitly asks
+for silence, generate audible human or synthetic narration, synchronize the
+teaching beats to it, and include matching captions. A silent audio file is a
+hard failure, not a narration track.
 
 ## Prerequisites
 
@@ -30,13 +35,21 @@ Run `scripts/setup.sh` to verify all dependencies. Requires: Python 3.10+, Manim
 
 | Mode | Input | Output | Reference |
 |------|-------|--------|-----------|
-| **Concept explainer** | Topic/concept | Animated explanation with geometric intuition | `references/scene-planning.md` |
+| **Concept explainer** | Topic/concept | Narrated explanation with geometric intuition | `references/concept-explainer.md` |
 | **Equation derivation** | Math expressions | Step-by-step animated proof | `references/equations.md` |
 | **Algorithm visualization** | Algorithm description | Step-by-step execution with data structures | `references/graphs-and-data.md` |
 | **Data story** | Data/metrics | Animated charts, comparisons, counters | `references/graphs-and-data.md` |
 | **Architecture diagram** | System description | Components building up with connections | `references/mobjects.md` |
 | **Paper explainer** | Research paper | Key findings and methods animated | `references/scene-planning.md` |
 | **3D visualization** | 3D concept | Rotating surfaces, parametric curves, spatial geometry | `references/camera-and-3d.md` |
+
+For a narrated concept explainer, read `references/concept-explainer.md` completely
+before planning. It is the focused production contract for narration locking,
+visual-beat density, independently renderable narrative chapters, derived-value
+checks, and targeted draft iteration. Use `assets/teaching.py` for semantic
+continuity and the components in `assets/domains/`; retain
+`assets/concept_explainer.py` for caption-safe layout, shared-frame composition,
+and collision checks.
 
 ## Stack
 
@@ -52,49 +65,51 @@ Single Python script per project. No browser, no Node.js, no GPU required.
 ## Pipeline
 
 ```
-PLAN --> CODE --> RENDER --> STITCH --> AUDIO (optional) --> REVIEW
+RESEARCH --> NARRATE --> VISUAL PLAN --> AUTHOR --> PREVIEW --> RENDER --> COMPOSE --> REVIEW
 ```
 
-1. **PLAN** — Write `plan.md` with narrative arc, scene list, visual elements, color palette, voiceover script
-2. **CODE** — Write `script.py` with one class per scene, each independently renderable
-3. **RENDER** — `manim -ql script.py Scene1 Scene2 ...` for draft, `-qh` for production
-4. **STITCH** — ffmpeg concat of scene clips into `final.mp4`
-5. **AUDIO** (optional) — Add voiceover and/or background music via ffmpeg. See `references/rendering.md`
-6. **REVIEW** — Render preview stills, verify against plan, adjust
+1. **RESEARCH** — Verify claims, examples, and derived values.
+2. **NARRATE** — Write and generate audible narration that progresses from the misconception to a specific visual payoff; omit speech only when the user explicitly requests silence.
+3. **VISUAL PLAN** — Complete the required `edit/visual_plan.md` contract.
+4. **AUTHOR** — Build one independently renderable class per narrative chapter and mark its internal beats with `next_section()` or `begin_beat()`.
+5. **PREVIEW** — Render only the chapters under repair with `scripts/preview_scene.py`.
+6. **RENDER** — Render the complete visual base at delivery quality.
+7. **COMPOSE** — Add approved footage when it is more informative than illustration, then use the existing EDL workflow for narration and captions.
+8. **REVIEW** — Inspect the complete video and verify that its speech track is audible before loudness normalization; the final quality decision is never made from isolated preview clips.
 
 ## Project Structure
 
 ```
 project-name/
-  plan.md                # Narrative arc, scene breakdown
-  script.py              # All scenes in one file
-  concat.txt             # ffmpeg scene list
-  final.mp4              # Stitched output
-  media/                 # Auto-generated by Manim
-    videos/script/480p15/
+  edit/
+    visual_plan.md       # Required semantic teaching plan for original explainers
+    animations/          # Chapter source and production renders
+    verify/              # Targeted chapter previews and review evidence
+    edl.json             # Existing composition contract; unchanged
+    final.mp4
 ```
 
 ## Creative Direction
 
-### Color Palettes
+### Semantic Theme
 
-| Palette | Background | Primary | Secondary | Accent | Use case |
-|---------|-----------|---------|-----------|--------|----------|
-| **Classic 3B1B** | `#1C1C1C` | `#58C4DD` (BLUE) | `#83C167` (GREEN) | `#FFFF00` (YELLOW) | General math/CS |
-| **Warm academic** | `#2D2B55` | `#FF6B6B` | `#FFD93D` | `#6BCB77` | Approachable |
-| **Neon tech** | `#0A0A0A` | `#00F5FF` | `#FF00FF` | `#39FF14` | Systems, architecture |
-| **Monochrome** | `#1A1A2E` | `#EAEAEA` | `#888888` | `#FFFFFF` | Minimalist |
+Create one `VisualTheme` for the approved direction. Its background, text,
+muted, primary, secondary, accent, warning, and title/body/label font roles keep
+meaning consistent without imposing a house palette. Components require the
+same theme instance and never embed another creator's palette or branding.
 
-### Animation Speed
+### Animation Timing Starting Points
 
-| Context | run_time | self.wait() after |
-|---------|----------|-------------------|
-| Title/intro appear | 1.5s | 1.0s |
-| Key equation reveal | 2.0s | 2.0s |
-| Transform/morph | 1.5s | 1.5s |
-| Supporting label | 0.8s | 0.5s |
-| FadeOut cleanup | 0.5s | 0.3s |
-| "Aha moment" reveal | 2.5s | 3.0s |
+| Context | Typical motion | Hold purpose |
+|---------|----------------|--------------|
+| Establish a model | 1–2s | orient to its parts |
+| Key equation reveal | 1.5–2.5s | connect notation to the model |
+| Transform/morph | 1–2s | compare initial and resulting state |
+| Supporting label | 0.5–1s | read only when it carries new meaning |
+| "Aha moment" reveal | 2–3s | study the final relationship |
+
+These are starting points. Narration alignment and comprehension decide the
+real timing; do not add the listed hold mechanically.
 
 ### Typography Scale
 
@@ -108,74 +123,88 @@ project-name/
 
 ### Fonts
 
-**Use monospace fonts for all text.** Manim's Pango renderer produces broken kerning with proportional fonts at all sizes. See `references/visual-design.md` for full recommendations.
+Typography follows the approved visual direction. Define title, body, and label
+roles in `VisualTheme`, confirm the selected fonts exist on the render host, and
+inspect their real output at medium quality. Monospace is appropriate for code
+or an intentional aesthetic; it is not a universal requirement. Keep ordinary
+text at `font_size=18` or larger and retain all width and frame-safety checks.
 
-```python
-MONO = "Menlo"  # define once at top of file
+### Continuity
 
-Text("Fourier Series", font_size=48, font=MONO, weight=BOLD)  # titles
-Text("n=1: sin(x)", font_size=20, font=MONO)                  # labels
-MathTex(r"\nabla L")                                            # math (uses LaTeX)
-```
-
-Minimum `font_size=18` for readability.
-
-### Per-Scene Variation
-
-Never use identical config for all scenes. For each scene:
-- **Different dominant color** from the palette
-- **Different layout** — don't always center everything
-- **Different animation entry** — vary between Write, FadeIn, GrowFromCenter, Create
-- **Different visual weight** — some scenes dense, others sparse
+- Preserve a concept's color role and screen position unless changing either one teaches something.
+- Carry important objects into later beats and transform them instead of recreating completed diagrams.
+- Update coupled numbers, plots, arrows, and labels from the same underlying value.
+- Use animation vocabulary for meaning: construction, transfer, comparison, causality, and state change.
 
 ## Workflow
 
-### Step 1: Plan (plan.md)
+### Step 1: Plan (`edit/visual_plan.md`)
 
-Before any code, write `plan.md`. See `references/scene-planning.md` for the comprehensive template.
+Before any original explainer code, complete `edit/visual_plan.md`. See
+`references/concept-explainer.md` and `references/scene-planning.md`. Clip-editing
+workflows do not require this artifact.
+
+When a chapter shares the frame with sourced footage, use
+`assets/concept_explainer.py`. Its `composition_regions()`,
+`assert_inside_region()`, and `normalized_bounds()` helpers use the same
+normalized rectangles as the renderer, so the EDL can protect the teaching
+visual from picture-in-picture collisions.
 
 ### Step 2: Code (script.py)
 
-One class per scene. Every scene is independently renderable.
+Use one class per narrative chapter. A chapter is independently renderable and
+contains multiple named teaching beats; it is not a short title-and-card scene.
 
 ```python
 from manim import *
+from teaching import TeachingScene, VisualTheme
+from domains import MatrixMap
 
-BG = "#1C1C1C"
-PRIMARY = "#58C4DD"
-SECONDARY = "#83C167"
-ACCENT = "#FFFF00"
-MONO = "Menlo"
+THEME = VisualTheme(
+    background="#10141C", text="#F6F7FA", muted="#7F8899",
+    primary="#5E8BFF", secondary="#57C4A5", accent="#F2C14E",
+    warning="#E56B6F", title_font="Inter", body_font="Inter",
+    label_font="Inter",
+)
 
-class Scene1_Introduction(Scene):
+class CompositionChapter(TeachingScene):
     def construct(self):
-        self.camera.background_color = BG
-        title = Text("Why Does This Work?", font_size=48, color=PRIMARY, weight=BOLD, font=MONO)
-        self.add_subcaption("Why does this work?", duration=2)
-        self.play(Write(title), run_time=1.5)
-        self.wait(1.0)
-        self.play(FadeOut(title), run_time=0.5)
+        self.theme = THEME
+        self.camera.background_color = THEME.background
+        transformation = self.remember("transformation", MatrixMap(THEME))
+        self.begin_beat("first transformation")
+        self.play(FadeIn(transformation))
+        self.begin_beat("composition payoff")
+        self.play(transformation.apply_to((1, 1)))
+        self.hold(2, purpose="compare input and composed output")
 ```
 
 Key patterns:
-- **Subtitles** on every animation: `self.add_subcaption("text", duration=N)` or `subcaption="text"` on `self.play()`
-- **Shared color constants** at file top for cross-scene consistency
-- **`self.camera.background_color`** set in every scene
-- **Clean exits** — FadeOut all mobjects at scene end: `self.play(FadeOut(Group(*self.mobjects)))`
+- **Narration mapping** for every significant visual action; captions remain composed last through the existing EDL renderer
+- **One shared `VisualTheme`** for semantic color and typography roles
+- **Named objects and beats** through `remember()` and `begin_beat()`
+- **Portable easing imports** — import `ease_out_cubic` and
+  `ease_in_out_cubic` from the copied concept-explainer asset; do not assume
+  unqualified easing names are exported by `from manim import *`
+- **Continuity at boundaries** — hold or transform the payoff frame; fade only objects whose departure has narrative meaning
+- **Frame-safe endings** — call `assert_inside_frame()` and
+  `assert_no_overlap()` on each chapter's critical teaching states, including
+  the payoff frame.
 
 ### Step 3: Render
 
 ```bash
-manim -ql script.py Scene1_Introduction Scene2_CoreConcept  # draft
-manim -qh script.py Scene1_Introduction Scene2_CoreConcept  # production
+python skills/manim-video/scripts/preview_scene.py \
+  edit/animations/script.py CompositionChapter
+manim -qh edit/animations/script.py CompositionChapter  # production
 ```
 
 ### Step 4: Stitch
 
 ```bash
 cat > concat.txt << 'EOF'
-file 'media/videos/script/480p15/Scene1_Introduction.mp4'
-file 'media/videos/script/480p15/Scene2_CoreConcept.mp4'
+file 'media/videos/script/480p15/CompositionChapter.mp4'
+file 'media/videos/script/480p15/SystemsChapter.mp4'
 EOF
 ffmpeg -y -f concat -safe 0 -i concat.txt -c copy final.mp4
 ```
@@ -183,8 +212,14 @@ ffmpeg -y -f concat -safe 0 -i concat.txt -c copy final.mp4
 ### Step 5: Review
 
 ```bash
-manim -ql --format=png -s script.py Scene2_CoreConcept  # preview still
+python skills/manim-video/scripts/preview_scene.py \
+  edit/animations/script.py CompositionChapter SystemsChapter
 ```
+
+The preview command writes only below `edit/verify/` and produces a low-quality
+chapter video, first and final frames, a five-frame contact sheet, media
+metadata, render status, and saved `next_section()` metadata. It selects whole
+scene classes; Manim does not support arbitrary section-only rendering here.
 
 ## Critical Implementation Notes
 
@@ -225,13 +260,15 @@ Always iterate at `-ql`. Only render `-qh` for final output.
 
 | File | Contents |
 |------|----------|
+| `references/concept-explainer.md` | Required narrated-explainer contract: audio lock, visual beats, timing, correctness, and efficient iteration |
+| `references/teaching-api.md` | Semantic scene API, linked values, continuity helpers, and domain component index |
 | `references/animations.md` | Core animations, rate functions, composition, `.animate` syntax, timing patterns |
 | `references/mobjects.md` | Text, shapes, VGroup/Group, positioning, styling, custom mobjects |
-| `references/visual-design.md` | 12 design principles, opacity layering, layout templates, color palettes |
+| `references/visual-design.md` | Semantic design principles, attention, layout patterns, themes, and typography |
 | `references/equations.md` | LaTeX in Manim, TransformMatchingTex, derivation patterns |
 | `references/graphs-and-data.md` | Axes, plotting, BarChart, animated data, algorithm visualization |
 | `references/camera-and-3d.md` | MovingCameraScene, ThreeDScene, 3D surfaces, camera control |
-| `references/scene-planning.md` | Narrative arcs, layout templates, scene transitions, planning template |
+| `references/scene-planning.md` | Narrative arcs, chapter continuity, beat planning, and visual-plan template |
 | `references/rendering.md` | CLI reference, quality presets, ffmpeg, voiceover workflow, GIF export |
 | `references/troubleshooting.md` | LaTeX errors, animation errors, common mistakes, debugging |
 | `references/animation-design-thinking.md` | When to animate vs show static, decomposition, pacing, narration sync |

@@ -207,6 +207,17 @@ Pick the engine per animation slot. Do not default to Remotion just because the 
 - **Manim** — formal diagrams, state machines, equation derivations, graph morphs. Read `skills/manim-video/SKILL.md` and its references for depth.
 - **PIL + PNG sequence + ffmpeg** — simple overlay cards: counters, typewriter text, single bar reveals, progressive draws. Fast to iterate, any aesthetic you want. The launch video used this.
 
+For an original end-to-end explainer, complete `edit/visual_plan.md`, use one
+independently renderable Manim class per narrative chapter with named internal
+beats, and build persistent semantic objects from
+`skills/manim-video/assets/teaching.py` and `skills/manim-video/assets/domains/`.
+Narration is part of this deliverable by default unless the user explicitly
+requests silence. Teach one mechanism per explainer under a minute, keep chapters to
+three, never time stretch recorded narration to fit, and keep labels at font size 24
+or larger; the full contract is in `skills/manim-video/references/concept-explainer.md`. This requirement does not apply to clip editing or an isolated
+illustration overlay. Read `skills/manim-video/references/concept-explainer.md`
+before authoring a Manim scene.
+
 For HyperFrames slots, scaffold the slot inside `edit/animations/slot_<id>/` with `npx --yes hyperframes init . --example blank --non-interactive --skip-skills`, build the HTML composition there, run the HyperFrames checks that fit the slot (`lint`, `validate`, and a draft render when practical), then produce the final overlay video with `npx --yes hyperframes render . -o render.mp4` or `--format webm -o render.webm` when alpha is required. Point the EDL overlay `file` at the actual rendered path.
 
 For Remotion slots, keep the Remotion project isolated inside the same slot directory, scaffold with `npx create-video@latest` or install Remotion locally there, render the composition to `render.mp4` with the project-local `remotion render` command, and verify duration and dimensions with `ffprobe`.

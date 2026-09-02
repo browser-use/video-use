@@ -41,9 +41,10 @@ equations = VGroup(MathTex(r"a"), MathTex(r"b"))
 
 **Rule:** If the group contains any `Text()`, use `Group`. If it's all shapes or all `MathTex`, `VGroup` is fine.
 
-**FadeOut everything:** Always use `Group(*self.mobjects)`, not `VGroup(*self.mobjects)`:
+**Mixed-type departure:** When a deliberate departure contains `Text`, use
+`Group`, not `VGroup`:
 ```python
-self.play(FadeOut(Group(*self.mobjects)))  # safe for mixed types
+self.play(FadeOut(Group(label, diagram)))  # safe for mixed types
 ```
 
 ## Group save_state() / restore() Not Supported

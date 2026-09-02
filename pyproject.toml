@@ -1,7 +1,7 @@
 [project]
 name = "video-use"
 version = "0.1.0"
-description = "Conversation-driven video editor skill for Claude Code"
+description = "Conversation-driven video production framework for coding agents"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
@@ -21,3 +21,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = []
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

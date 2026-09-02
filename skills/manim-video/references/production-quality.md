@@ -1,190 +1,108 @@
 # Production Quality Checklist
 
-Standards and checks for ensuring animation output is publication-ready.
+Standards for publication-ready original explainers.
 
-## Pre-Code Checklist
+## Before Code
 
-Before writing any Manim code:
+- [ ] Research is sourced and claims are verified.
+- [ ] Narration states a misconception, progression, thesis, and visual payoff.
+- [ ] `edit/visual_plan.md` contains the required teaching contract, chapter map,
+  beat table, payoff frame, and optional-footage rationale.
+- [ ] Semantically named objects and carried state are identified.
+- [ ] Coupled representations share a calculation or `LinkedValue`.
+- [ ] One `VisualTheme` defines color and title/body/label font roles.
+- [ ] Target resolution, aspect ratio, caption rail, and protected regions are
+  known.
 
-- [ ] Narration script written with visual beats marked
-- [ ] Scene list with purpose, duration, and layout for each
-- [ ] Color palette defined with meaning assignments (`PRIMARY` = main concept, etc.)
-- [ ] `MONO = "Menlo"` set as the font constant
-- [ ] Target resolution and aspect ratio decided
-
-## Text Quality
-
-### Overlap prevention
-
-```python
-# RULE: buff >= 0.5 for edge text
-label.to_edge(DOWN, buff=0.5)     # GOOD
-label.to_edge(DOWN, buff=0.3)     # BAD — may clip
-
-# RULE: FadeOut previous before adding new at same position
-self.play(ReplacementTransform(note1, note2))  # GOOD
-self.play(Write(note2))                          # BAD — overlaps note1
-
-# RULE: Reduce font size for dense scenes
-# When > 4 text elements visible, use font_size=20 not 28
-```
-
-### Width enforcement
-
-Long text strings overflow the frame:
+## Text and Frame Safety
 
 ```python
-# RULE: Set max width for any text that might be long
-text = Text("This is a potentially long description", font_size=22, font=MONO)
+# Keep edge text inside a meaningful safe margin.
+label.to_edge(DOWN, buff=0.5)
+
+# Transform copy occupying the same semantic role.
+self.play(ReplacementTransform(note1, note2))
+
+# Fit authored copy before rendering.
 if text.width > config.frame_width - 1.0:
-    text.set_width(config.frame_width - 1.0)
+    text.scale_to_fit_width(config.frame_width - 1.0)
 ```
 
-### Font consistency
+- Keep labels at `font_size=24` or larger and titles at 36 or larger; keep at most four foreground groups on screen at any critical frame.
+- Use the approved typography; monospace is optional, not universal.
+- Test selected fonts on the render host.
+- Run `assert_inside_frame()` and `assert_no_overlap()` for every chapter ending.
+- Treat clipped titles, labels, equations, and payoff copy as failed renders.
 
-```python
-# RULE: Define MONO once, use everywhere
-MONO = "Menlo"
+## Spatial and Semantic Continuity
 
-# WRONG: mixing fonts
-Text("Title", font="Helvetica")
-Text("Label", font="Arial")
-Text("Code", font="Courier")
+The default 16:9 frame is about 14.2 by 8 units. Reserve real margins, protected
+caption space, and enough negative space for attention shifts.
 
-# RIGHT: one font
-Text("Title", font=MONO, weight=BOLD, font_size=48)
-Text("Label", font=MONO, font_size=20)
-Text("Code", font=MONO, font_size=18)
-```
-
-## Spatial Layout
-
-### The coordinate budget
-
-The visible frame is approximately 14.2 wide × 8.0 tall (default 16:9). With mandatory margins:
-
-```
-Usable area: x ∈ [-6.5, 6.5], y ∈ [-3.5, 3.5]
-Top title zone: y ∈ [2.5, 3.5]
-Bottom note zone: y ∈ [-3.5, -2.5]
-Main content: y ∈ [-2.5, 2.5], x ∈ [-6.0, 6.0]
-```
-
-### Fill the frame
-
-Empty scenes look unfinished. If the main content is small, add context:
-- A dimmed grid/axes behind the content
-- A title/subtitle at the top
-- A source citation at the bottom
-- Decorative geometry at low opacity
-
-### Maximum simultaneous elements
-
-**Hard limit: 6 actively visible elements.** Beyond that, the viewer can't track everything. If you need more:
-- Dim old elements to opacity 0.3
-- Remove elements that have served their purpose
-- Split into two scenes
+- Important objects persist across beats instead of being recreated.
+- A concept keeps its semantic color and approximate position.
+- Camera moves only when changing scale or focus teaches something.
+- Dim context instead of deleting it when the viewer still needs orientation.
+- Remove an object only when completion, replacement, loss, or scope change makes
+  that departure meaningful.
+- Dense diagrams can exceed six total objects when hierarchy and focus keep the
+  active relationship legible; there is no arbitrary object-count limit.
 
 ## Animation Quality
 
-### Variety audit
+- Every animation constructs, transforms, transfers, compares, or reveals a
+  causal relationship.
+- Do not rotate animation types, dominant colors, or layouts merely for variety.
+- Simultaneous motion is coordinated around one causal event.
+- Holds exist for reading, comparison, prediction, or payoff. Holds longer than
+  three seconds record their purpose.
+- Hard cuts, fades, and transform bridges are all valid when editorially
+  motivated. Fading every mobject at every boundary is not a cleanup rule.
+- The last meaningful state remains visible through the final spoken words.
 
-Check that no two consecutive scenes use the exact same:
-- Animation type (if Scene 3 uses Write for everything, Scene 4 should use FadeIn or Create)
-- Color emphasis (rotate through palette colors)
-- Layout (center, left-right, grid — alternate)
-- Pacing (if Scene 2 was slow and deliberate, Scene 3 can be faster)
+## Color and Typography
 
-### Tempo curve
+- The shared theme has sufficient contrast on its actual background.
+- Muted context remains visible but subordinate.
+- Accent denotes the same teaching role across chapters.
+- Warning is reserved for exceptions, failures, or risk.
+- Font roles remain stable and render cleanly at delivery size.
+- No external creator's palette, typography, scene code, or branding is copied.
 
-A good video follows a tempo curve:
+## Data and Linked Representations
 
-```
-Slow ──→ Medium ──→ FAST (climax) ──→ Slow (conclusion)
+- Axis scales and breaks are honest and labeled when needed.
+- Notable values come from calculations rather than duplicated literals.
+- Counters, plots, arrows, matrices, and labels agree at initial, intermediate,
+  and final states.
+- Tests or assertions cover derived matrix products, percentages, balances, and
+  other authored values.
 
-Scene 1: Slow (introduction, setup)
-Scene 2: Medium (building understanding)
-Scene 3: Medium-Fast (core content, lots of animation)
-Scene 4: FAST (montage of applications/results)
-Scene 5: Slow (conclusion, key takeaway)
-```
+## Before Production Render
 
-### Transition quality
+- [ ] Every chapter class renders by itself at low quality.
+- [ ] `begin_beat()` or `next_section()` names internal teaching beats.
+- [ ] Targeted preview artifacts include video, first/final frames, contact sheet,
+  media metadata, status, and available section metadata.
+- [ ] Text-heavy frames have a medium-quality inspection.
+- [ ] Safe-frame checks pass.
+- [ ] The payoff frame matches `edit/visual_plan.md`.
+- [ ] Sourced footage, if any, has provenance, rights evidence, and a written
+  reason it is better than illustration.
 
-Between scenes:
-- **Clean exit**: `self.play(FadeOut(Group(*self.mobjects)), run_time=0.5)`
-- **Brief pause**: `self.wait(0.3)` after fadeout, before next scene's first animation
-- **Never hard-cut**: always animate the transition
+## Complete-Video Review
 
-## Color Quality
-
-### Dimming on dark backgrounds
-
-Colors that look vibrant on white look muddy on dark backgrounds (#0D1117, #1C1C1C). Test your palette:
-
-```python
-# Colors that work well on dark backgrounds:
-# Bright and saturated: #58C4DD, #83C167, #FFFF00, #FF6B6B
-# Colors that DON'T work: #666666 (invisible), #2244AA (too dark)
-
-# RULE: Structural elements (axes, grids) at opacity 0.15
-# Context elements at 0.3-0.4
-# Primary elements at 1.0
-```
-
-### Color meaning consistency
-
-Once a color is assigned a meaning, it keeps that meaning for the entire video:
-
-```python
-# If PRIMARY (#58C4DD) means "the model" in Scene 1,
-# it means "the model" in every scene.
-# Never reuse PRIMARY for a different concept later.
-```
-
-## Data Visualization Quality
-
-### Minimum requirements for charts
-
-- Axis labels on every axis
-- Y-axis range starts at 0 (or has a clear break indicator)
-- Bar/line colors match the legend
-- Numbers on notable data points (at least the maximum and the comparison point)
-
-### Animated counters
-
-When showing a number changing:
-```python
-# GOOD: DecimalNumber with smooth animation
-counter = DecimalNumber(0, font_size=48, num_decimal_places=0, font="Menlo")
-self.play(counter.animate.set_value(1000), run_time=3, rate_func=rush_from)
-
-# BAD: Text that jumps between values
-```
-
-## Pre-Render Checklist
-
-Before running `manim -qh`:
-
-- [ ] All scenes render without errors at `-ql`
-- [ ] Preview stills at `-qm` for text-heavy scenes (check kerning)
-- [ ] Background color set in every scene (`self.camera.background_color = BG`)
-- [ ] `add_subcaption()` or `subcaption=` on every significant animation
-- [ ] No text smaller than font_size=18
-- [ ] No text using proportional fonts (use monospace)
-- [ ] buff >= 0.5 on all `.to_edge()` calls
-- [ ] Clean exit (FadeOut all) at end of every scene
-- [ ] `self.wait()` after every reveal
-- [ ] Color constants used (no hardcoded hex strings in scene code)
-- [ ] All scenes use the same quality flag (don't mix `-ql` and `-qh`)
-
-## Post-Render Checklist
-
-After stitching the final video:
-
-- [ ] Watch the complete video at 1x speed — does it feel rushed anywhere?
-- [ ] Is there a moment where two things animate simultaneously and it's confusing?
-- [ ] Does every text label have enough time to be read?
-- [ ] Are transitions between scenes smooth (no black frames, no jarring cuts)?
-- [ ] Is the audio in sync with the visuals (if using voiceover)?
-- [ ] Is the Gibbs-like "first impression" good? The first 5 seconds determine if someone keeps watching
+- [ ] Watch the full video at 1x; isolated chapter previews are not the quality
+  gate.
+- [ ] The teaching thesis and final payoff are clear.
+- [ ] Important objects persist across multiple beats.
+- [ ] Motion reveals relationships instead of decorating.
+- [ ] Linked representations remain consistent.
+- [ ] Camera and opacity guide attention.
+- [ ] Visual language and pacing remain coherent.
+- [ ] The video does not repeatedly reset into title-and-card slides.
+- [ ] There are no factual errors, invalid values, clipped teaching content,
+  caption collisions, broken renders, missing audio, or incorrect delivery
+  properties.
+- [ ] Existing EDL overlay order, protected regions, captions-last behavior, and
+  delivery validation still pass.

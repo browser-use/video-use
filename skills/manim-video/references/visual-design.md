@@ -1,124 +1,97 @@
 # Visual Design Principles
 
-## 12 Core Principles
+## Core Principles
 
-1. **Geometry Before Algebra** — Show the shape first, the equation second.
-2. **Opacity Layering** — PRIMARY=1.0, CONTEXT=0.4, GRID=0.15. Direct attention through brightness.
-3. **One New Idea Per Scene** — Each scene introduces exactly one concept.
-4. **Spatial Consistency** — Same concept occupies the same screen region throughout.
-5. **Color = Meaning** — Assign colors to concepts, not mobjects. If velocity is blue, it stays blue.
-6. **Progressive Disclosure** — Show simplest version first, add complexity incrementally.
-7. **Transform, Don't Replace** — Use Transform/ReplacementTransform to show connections.
-8. **Breathing Room** — `self.wait(1.5)` minimum after showing something new.
-9. **Visual Weight Balance** — Don't cluster everything on one side.
-10. **Consistent Motion Vocabulary** — Pick a small set of animation types and reuse them.
-11. **Dark Background, Light Content** — #1C1C1C to #2D2B55 backgrounds maximize contrast.
-12. **Intentional Empty Space** — Leave at least 15% of the frame empty.
+1. **Geometry before algebra** — show the shape or mechanism before notation when
+   that progression helps the topic.
+2. **Opacity directs attention** — keep the active relationship strongest and
+   preserve context at a lower salience.
+3. **Beats change understanding** — a beat introduces a state change or a new
+   relationship, not merely a new card.
+4. **Spatial consistency** — the same concept occupies the same region unless
+   movement itself explains something.
+5. **Color equals meaning** — assign theme roles to concepts rather than rotating
+   colors between chapters.
+6. **Progressive disclosure** — construct the simplest useful state first and add
+   complexity as the narration earns it.
+7. **Transform instead of reset** — maintain object identity when showing how two
+   states or representations connect.
+8. **Deliberate holds** — pause for reading, comparison, prediction, or payoff.
+9. **Visual weight balance** — make the central teaching object large enough to
+   own the content area without filling space decoratively.
+10. **Consistent motion vocabulary** — reuse movement that has the same meaning.
+11. **Direction-specific contrast** — validate the approved palette on its actual
+    background rather than assuming every explainer must be dark.
+12. **Intentional empty space** — leave enough room for hierarchy, camera focus,
+    and captions.
 
-## Layout Templates
+## Layout Patterns
 
-### FULL_CENTER
-One main element centered, title above, note below.
-Best for: single equations, single diagrams, title cards.
+These are compositional starting points, not fixed templates:
 
-### LEFT_RIGHT
-Two elements side by side at x=-3.5 and x=3.5.
-Best for: equation + visual, before/after, comparison.
+- **Single model** — one persistent object with local labels and a payoff state.
+- **Linked representations** — equation, geometry, chart, or counter driven by
+  the same value.
+- **Before and after** — shared inputs and measures, with a visible causal change.
+- **System flow** — stable components connected by a request, force, resource, or
+  information transfer.
+- **Nested focus** — a complete system stays visible while camera and opacity
+  isolate a mechanism.
+- **Progressive construction** — parts appear only as their relationship becomes
+  relevant.
 
-### TOP_BOTTOM
-Main element at y=1.5, supporting content at y=-1.5.
-Best for: concept + examples, theorem + cases.
+## Semantic Theme
 
-### GRID
-Multiple elements via `arrange_in_grid()`.
-Best for: comparison matrices, multi-step processes.
+`VisualTheme` defines background, text, muted, primary, secondary, accent,
+warning, and title/body/label font roles. Choose those values from the approved
+visual direction. Reuse the same theme across chapters and pass it to every
+domain component.
 
-### PROGRESSIVE
-Elements appear one at a time, arranged DOWN with aligned_edge=LEFT.
-Best for: algorithms, proofs, step-by-step processes.
+Before production:
 
-### ANNOTATED_DIAGRAM
-Central diagram with floating labels connected by arrows.
-Best for: architecture diagrams, annotated figures.
+- Check contrast at the real delivery size and background.
+- Confirm the accent remains legible when context is dimmed.
+- Reserve warning for exceptions, failures, or risk.
+- Confirm semantic roles do not change meaning later in the video.
+- Avoid copying another creator's branding, palette, or typography.
 
-## Color Palettes
+## Typography
 
-### Classic 3B1B
-```python
-BG="#1C1C1C"; PRIMARY=BLUE; SECONDARY=GREEN; ACCENT=YELLOW; HIGHLIGHT=RED
-```
+Typography follows the approved visual direction. Proportional and monospace
+fonts are both valid:
 
-### Warm Academic
-```python
-BG="#2D2B55"; PRIMARY="#FF6B6B"; SECONDARY="#FFD93D"; ACCENT="#6BCB77"
-```
-
-### Neon Tech
-```python
-BG="#0A0A0A"; PRIMARY="#00F5FF"; SECONDARY="#FF00FF"; ACCENT="#39FF14"
-```
-
-## Font Selection
-
-**Use monospace fonts for all text.** Manim's Pango text renderer produces broken kerning with proportional fonts (Helvetica, Inter, SF Pro, Arial) at all sizes and resolutions. Characters overlap and spacing is inconsistent. This is a fundamental Pango limitation, not a Manim bug.
-
-Monospace fonts have fixed character widths — zero kerning issues by design.
-
-### Recommended Fonts
-
-| Use case | Font | Fallback |
-|----------|------|----------|
-| **All text (default)** | `"Menlo"` | `"Courier New"`, `"DejaVu Sans Mono"` |
-| Code, labels | `"JetBrains Mono"`, `"SF Mono"` | `"Menlo"` |
-| Math | Use `MathTex` (renders via LaTeX, not Pango) | — |
+- Use proportional display or text faces when they suit the tone and render
+  cleanly on the target host.
+- Use monospace for code, fixed-width data, or an intentional technical voice.
+- Use `MathTex` for mathematical notation that benefits from LaTeX.
+- Keep ordinary text at `font_size=18` or larger.
+- Define title, body, and label fonts once in `VisualTheme`.
+- Fit long labels to their allotted width and run frame-safety checks.
+- Preview text-heavy frames at medium quality because low-quality output can hide
+  spacing and rasterization defects.
 
 ```python
-MONO = "Menlo"  # define once at top of file
-
-title = Text("Fourier Series", font_size=48, color=PRIMARY, weight=BOLD, font=MONO)
-label = Text("n=1: (4/pi) sin(x)", font_size=20, color=BLUE, font=MONO)
-note = Text("Convergence at discontinuities", font_size=18, color=DIM, font=MONO)
-
-# Math — always use MathTex, not Text
-equation = MathTex(r"\nabla L = \frac{\partial L}{\partial w}")
+THEME = VisualTheme(
+    background="#F6F3EC",
+    text="#1D2430",
+    muted="#7A8190",
+    primary="#315C9B",
+    secondary="#3F8A78",
+    accent="#D48C24",
+    warning="#B84A4A",
+    title_font="Source Serif 4",
+    body_font="Inter",
+    label_font="Inter",
+)
 ```
 
-### When Proportional Fonts Are Acceptable
+## Attention Checklist
 
-Large title text (font_size >= 48) with short strings (1-3 words) can use proportional fonts without visible kerning issues. For anything else — labels, descriptions, multi-word text, small sizes — use monospace.
+For every planned payoff or dense frame:
 
-### Font Availability
-
-- **macOS**: Menlo (pre-installed), SF Mono
-- **Linux**: DejaVu Sans Mono (pre-installed), Liberation Mono
-- **Cross-platform**: JetBrains Mono (install from jetbrains.com)
-
-`"Menlo"` is the safest default — pre-installed on macOS, and Linux systems fall back to DejaVu Sans Mono.
-
-### Fine-Grained Text Control
-
-`Text()` does not support `letter_spacing` or kerning parameters. For fine control, use `MarkupText` with Pango attributes:
-
-```python
-# Letter spacing (Pango units: 1/1024 of a point)
-MarkupText('<span letter_spacing="6000">HERMES</span>', font_size=18, font="Menlo")
-
-# Bold specific words
-MarkupText('This is <b>important</b>', font_size=24, font="Menlo")
-
-# Color specific words
-MarkupText('Red <span foreground="#FF6B6B">warning</span>', font_size=24, font="Menlo")
-```
-
-### Minimum Font Size
-
-`font_size=18` is the minimum for readable text at any resolution. Below 18, characters become blurry at `-ql` and barely readable even at `-qh`.
-
-## Visual Hierarchy Checklist
-
-For every frame:
-1. What is the ONE thing to look at? (brightest/largest)
-2. What is context? (dimmed to 0.3-0.4)
-3. What is structural? (dimmed to 0.15)
-4. Enough empty space? (>15%)
-5. All text readable at phone size?
+1. What is the one relationship to notice?
+2. Which persistent objects are context?
+3. Should focus use position, scale, camera, opacity, or a highlight?
+4. Do all linked representations agree?
+5. Is every label readable and inside the safe frame?
+6. Is caption space still clear?

@@ -4,7 +4,9 @@ Production pipeline for mathematical and technical animations using [Manim Commu
 
 ## What it does
 
-Creates 3Blue1Brown-style animated videos from text prompts. The agent handles the full pipeline: creative planning, Python code generation, rendering, scene stitching, and iterative refinement.
+Creates original semantic animated videos from text prompts. The agent handles
+research, narration, the required visual plan, chapter authoring, targeted
+preview, rendering, composition, and complete-video review.
 
 ## Use cases
 
@@ -19,5 +21,10 @@ Creates 3Blue1Brown-style animated videos from text prompts. The agent handles t
 Python 3.10+, Manim CE (`pip install manim`), LaTeX, ffmpeg.
 
 ```bash
-bash skills/creative/manim-video/scripts/setup.sh
+bash skills/manim-video/scripts/setup.sh
 ```
+
+Original explainers use `assets/teaching.py` for persistent named objects,
+linked values, attention choreography, and chapter continuity. The broad
+`assets/domains/` kit supplies style-neutral math, AI, systems, physics, biology,
+finance, and business components without constraining custom Manim code.

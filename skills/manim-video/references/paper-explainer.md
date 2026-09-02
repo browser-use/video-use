@@ -69,12 +69,15 @@ But Chinchilla showed us that most models are undertrained..."
 After the narration, break it into scenes. Each scene is one Manim class.
 
 ```markdown
-Scene 1: Hook — surprising stat with animated counter
-Scene 2: Problem — model size bar chart growing
-Scene 3: Key insight — training data vs parameters, animated 2D plot
-Scene 4: Method — pipeline diagram building left to right
-Scene 5: Results — before/after comparison with animated bars
-Scene 6: Closing — implications text
+Chapter 1: Establish the persistent model and expose the paper's problem
+  Beat: measured failure
+  Beat: failed baseline
+Chapter 2: Transform that model with the paper's method
+  Beat: mechanism
+  Beat: linked prediction
+Chapter 3: Compare measured results and land the implication payoff
+  Beat: before/after
+  Beat: final thesis
 ```
 
 ### Gate 3: Style constants
@@ -82,19 +85,27 @@ Scene 6: Closing — implications text
 Before coding scenes, define the visual language:
 
 ```python
-# style.py — import in every scene file
-BG = "#0D1117"
-PRIMARY = "#58C4DD"
-SECONDARY = "#83C167"
-ACCENT = "#FFFF00"
-HIGHLIGHT = "#FF6B6B"
-MONO = "Menlo"
+# style.py — import in every chapter file
+from teaching import VisualTheme
+
+THEME = VisualTheme(
+    background="<approved background>",
+    text="<approved text>",
+    muted="<context>",
+    primary="<model>",
+    secondary="<data>",
+    accent="<result>",
+    warning="<failure>",
+    title_font="<approved title font>",
+    body_font="<approved body font>",
+    label_font="<approved label font>",
+)
 
 # Color meanings for THIS paper
-MODEL_COLOR = PRIMARY      # "the model"
-DATA_COLOR = SECONDARY     # "training data"
-BASELINE_COLOR = HIGHLIGHT # "previous approach"
-RESULT_COLOR = ACCENT      # "our result"
+MODEL_COLOR = THEME.primary
+DATA_COLOR = THEME.secondary
+BASELINE_COLOR = THEME.warning
+RESULT_COLOR = THEME.accent
 ```
 
 ## First-principles equation explanation
