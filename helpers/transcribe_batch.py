@@ -20,7 +20,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one
+from transcribe import load_api_key, transcribe_one, transcript_path
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -56,6 +56,12 @@ def main() -> None:
         default=None,
         help="Optional number of speakers. Improves diarization when known.",
     )
+    ap.add_argument(
+        "--audio-track",
+        type=int,
+        default=0,
+        help="Zero-based audio track to transcribe (OBS: 0 = game, 1 = mic).",
+    )
     args = ap.parse_args()
 
     videos_dir = args.videos_dir.resolve()
@@ -69,7 +75,8 @@ def main() -> None:
     if not videos:
         sys.exit(f"no videos found in {videos_dir}")
 
-    already_cached = [v for v in videos if (edit_dir / "transcripts" / f"{v.stem}.json").exists()]
+    already_cached = [v for v in videos
+                      if transcript_path(edit_dir, v, args.audio_track).exists()]
     pending = [v for v in videos if v not in already_cached]
 
     print(f"found {len(videos)} videos ({len(already_cached)} cached, {len(pending)} to transcribe)")
@@ -93,6 +100,7 @@ def main() -> None:
                 language=args.language,
                 num_speakers=args.num_speakers,
                 verbose=False,
+                audio_track=args.audio_track,
             ): v
             for v in pending
         }

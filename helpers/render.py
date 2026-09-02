@@ -27,6 +27,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from fractions import Fraction
 from pathlib import Path
 
 try:
@@ -133,18 +134,99 @@ def is_hdr_source(video: Path) -> bool:
 
 
 def is_portrait_source(video: Path) -> bool:
-    """Return True if the video's height > width (portrait / vertical)."""
+    """Return True if the displayed video is portrait, including rotation."""
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", str(video)],
+             "-show_entries",
+             "stream=width,height:stream_side_data=rotation",
+             "-of", "json", str(video)],
             capture_output=True, text=True, check=True,
         )
-        w, h = map(int, out.stdout.strip().split(","))
+        streams = json.loads(out.stdout).get("streams") or []
+        if not streams:
+            return False
+        stream = streams[0]
+        w, h = int(stream["width"]), int(stream["height"])
+
+        # ffmpeg autorotates display-matrix side data before applying filters.
+        # Swap coded dimensions for quarter-turns so the scale axis is selected
+        # from the dimensions the filter actually sees. A plain metadata tag is
+        # intentionally ignored because it does not guarantee autorotation.
+        rotation = 0
+        for side_data in stream.get("side_data_list") or []:
+            if side_data.get("rotation") is not None:
+                rotation = side_data["rotation"]
+                break
+        if int(round(float(rotation))) % 360 in (90, 270):
+            w, h = h, w
         return h > w
-    except Exception:
+    except (
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+        OSError,
+        OverflowError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
         return False
+
+
+def parse_fps(value: str) -> str:
+    """Validate and canonicalize an ffmpeg frame rate."""
+    text = value.strip()
+    if len(text) > 32 or not re.fullmatch(
+        r"(?:[0-9]+(?:\.[0-9]+)?|[0-9]+/[0-9]+)", text
+    ):
+        raise argparse.ArgumentTypeError(
+            "FPS must be a positive number or rational, e.g. 30 or 30000/1001"
+        )
+    try:
+        rate = Fraction(text)
+    except (ValueError, ZeroDivisionError) as exc:
+        raise argparse.ArgumentTypeError(
+            "FPS must be a positive number or rational, e.g. 30 or 30000/1001"
+        ) from exc
+    if rate <= 0:
+        raise argparse.ArgumentTypeError("FPS must be greater than zero")
+    # FFmpeg stores video rates as AVRational (signed 32-bit components).
+    # Bounding the reduced fraction keeps every accepted canonical value safe
+    # for ffmpeg and makes parse_fps(parse_fps(value)) idempotent.
+    max_component = 2_147_483_647
+    if rate.numerator > max_component or rate.denominator > max_component:
+        raise argparse.ArgumentTypeError("FPS precision or magnitude is too large")
+    return f"{rate.numerator}/{rate.denominator}"
+
+
+def probe_source_fps(video: Path) -> str | None:
+    """Return an ffmpeg-ready source rate, preferring the average frame rate.
+
+    ``avg_frame_rate`` represents the observed average and is the better default
+    for variable-frame-rate inputs. ``r_frame_rate`` remains a fallback for
+    streams where the average is unavailable. Values are normalized to an exact
+    rational so rates such as ``30000/1001`` survive without rounding.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+             "-of", "json", str(video)],
+            capture_output=True, text=True, check=True,
+        )
+        streams = json.loads(out.stdout).get("streams") or []
+        if not streams:
+            return None
+        for field in ("avg_frame_rate", "r_frame_rate"):
+            value = streams[0].get(field)
+            if value and value != "0/0":
+                try:
+                    return parse_fps(value)
+                except argparse.ArgumentTypeError:
+                    continue
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+        return None
+    return None
 
 
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
@@ -158,6 +240,7 @@ def extract_segment(
     out_path: Path,
     preview: bool = False,
     draft: bool = False,
+    rate: str | None = None,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -196,6 +279,12 @@ def extract_segment(
     else:
         preset, crf = "fast", "20"
 
+    # Frame rate: use the rate the caller resolved once for the whole render
+    # (every segment must share it — concat -c copy in Rule 2 requires a uniform
+    # frame rate). When called standalone with no rate, preserve this source's
+    # own rate; fall back to 24 only if it can't be probed.
+    out_rate = rate if rate is not None else (probe_source_fps(source) or "24")
+
     cmd = [
         "ffmpeg", "-y",
         "-ss", f"{seg_start:.3f}",
@@ -204,7 +293,7 @@ def extract_segment(
         "-vf", vf,
         "-af", af,
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
-        "-pix_fmt", "yuv420p", "-r", "24",
+        "-pix_fmt", "yuv420p", "-r", out_rate,
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
         str(out_path),
@@ -217,6 +306,7 @@ def extract_all_segments(
     edit_dir: Path,
     preview: bool,
     draft: bool = False,
+    fps: str | None = None,
 ) -> list[Path]:
     """Extract every EDL range into edit_dir/clips_graded/seg_NN.mp4.
     Returns the ordered list of segment paths.
@@ -235,8 +325,22 @@ def extract_all_segments(
     ranges = edl["ranges"]
     sources = edl["sources"]
 
+    # Resolve ONE output frame rate for the entire render and apply it to every
+    # segment. The lossless concat (Rule 2, `-c copy`) requires all segments to
+    # share a frame rate; probing per-segment would diverge for multi-source
+    # EDLs that mix rates (e.g. a 30fps and a 60fps source) and break the concat.
+    # Explicit --fps wins; otherwise preserve the first source's rate.
+    if fps is not None:
+        out_rate = parse_fps(str(fps))
+    elif ranges:
+        first_src = resolve_path(sources[ranges[0]["source"]], edit_dir)
+        out_rate = probe_source_fps(first_src) or "24"
+    else:
+        out_rate = "24"
+
     seg_paths: list[Path] = []
-    print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/")
+    print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  @ {out_rate} fps"
+          f"{' (forced)' if fps is not None else ' (from source)'}")
     if is_auto:
         print("  (auto-grade per segment: analyzing each range)")
     for i, r in enumerate(ranges):
@@ -256,7 +360,7 @@ def extract_all_segments(
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft)
+        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate)
         seg_paths.append(out_path)
 
     return seg_paths
@@ -613,6 +717,14 @@ def main() -> None:
         action="store_true",
         help="Skip audio loudness normalization. Default is on (-14 LUFS, -1 dBTP, LRA 11).",
     )
+    ap.add_argument(
+        "--fps",
+        type=parse_fps,
+        default=None,
+        help="Output frame rate. Default: preserve the source's frame rate "
+             "(falls back to 24 if it can't be probed). Pass e.g. --fps 30 or "
+             "--fps 30000/1001 to force.",
+    )
     args = ap.parse_args()
 
     edl_path = args.edl.resolve()
@@ -625,7 +737,7 @@ def main() -> None:
 
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(
-        edl, edit_dir, preview=args.preview, draft=args.draft
+        edl, edit_dir, preview=args.preview, draft=args.draft, fps=args.fps
     )
 
     # 2. Concat → base

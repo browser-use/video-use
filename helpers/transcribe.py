@@ -16,12 +16,15 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import array
 import json
+import math
 import os
 import subprocess
 import sys
 import tempfile
 import time
+import wave
 from pathlib import Path
 
 import requests
@@ -46,9 +49,32 @@ def load_api_key() -> str:
     return v
 
 
-def extract_audio(video_path: Path, dest: Path) -> None:
+def count_audio_tracks(video_path: Path) -> int:
+    """How many audio streams the container holds."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a",
+         "-show_entries", "stream=index", "-of", "csv=p=0", str(video_path)],
+        capture_output=True, text=True,
+    )
+    return len([ln for ln in out.stdout.splitlines() if ln.strip()])
+
+
+def peak_dbfs(wav_path: Path) -> float:
+    """Peak level of a 16-bit PCM wav, in dBFS. -inf for digital silence."""
+    peak = 0
+    with wave.open(str(wav_path), "rb") as w:
+        # A chunk at a time: batch mode runs several of these at once, and a two-hour
+        # take is 230 MB of 16 kHz mono before the array copy doubles it.
+        while frames := w.readframes(1 << 16):
+            samples = array.array("h", frames)
+            peak = max(peak, max(samples), -min(samples))
+    return 20 * math.log10(peak / 32768) if peak > 0 else float("-inf")
+
+
+def extract_audio(video_path: Path, dest: Path, audio_track: int = 0) -> None:
     cmd = [
         "ffmpeg", "-y", "-i", str(video_path),
+        "-map", f"0:a:{audio_track}",
         "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
         str(dest),
     ]
@@ -87,6 +113,18 @@ def call_scribe(
     return resp.json()
 
 
+def transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
+    """Where a video's transcript lands.
+
+    The track belongs in the name, or a rerun with --audio-track hands back the transcript of
+    the track it is meant to replace. Track 0 keeps the plain name, so transcripts made before
+    the flag existed stay valid. Batch mode tests its cache with this too — one function, so
+    the two cannot drift apart.
+    """
+    suffix = "" if audio_track == 0 else f".track{audio_track}"
+    return edit_dir / "transcripts" / f"{video.stem}{suffix}.json"
+
+
 def transcribe_one(
     video: Path,
     edit_dir: Path,
@@ -94,6 +132,7 @@ def transcribe_one(
     language: str | None = None,
     num_speakers: int | None = None,
     verbose: bool = True,
+    audio_track: int = 0,
 ) -> Path:
     """Transcribe a single video. Returns path to transcript JSON.
 
@@ -101,7 +140,7 @@ def transcribe_one(
     """
     transcripts_dir = edit_dir / "transcripts"
     transcripts_dir.mkdir(parents=True, exist_ok=True)
-    out_path = transcripts_dir / f"{video.stem}.json"
+    out_path = transcript_path(edit_dir, video, audio_track)
 
     if out_path.exists():
         if verbose:
@@ -111,10 +150,28 @@ def transcribe_one(
     if verbose:
         print(f"  extracting audio from {video.name}", flush=True)
 
+    n_tracks = count_audio_tracks(video)
+    if n_tracks > 1 and verbose:
+        print(f"  note: {video.name} has {n_tracks} audio tracks, using track "
+              f"{audio_track + 1} (--audio-track to change)", flush=True)
+
     t0 = time.time()
     with tempfile.TemporaryDirectory() as tmp:
         audio = Path(tmp) / f"{video.stem}.wav"
-        extract_audio(video, audio)
+        extract_audio(video, audio, audio_track)
+
+        # Uploading silence costs the same as uploading speech and returns
+        # nothing, so catch the wrong-track case before paying for it.
+        peak = peak_dbfs(audio)
+        if peak < -60.0:
+            raise RuntimeError(
+                f"track {audio_track + 1} of {video.name} is silent "
+                f"(peak {peak:.1f} dBFS) - not uploading. "
+                + (f"The file has {n_tracks} audio tracks; try --audio-track "
+                   + " or ".join(str(i) for i in range(n_tracks) if i != audio_track) + "."
+                   if n_tracks > 1 else "Check the source audio.")
+            )
+
         size_mb = audio.stat().st_size / (1024 * 1024)
         if verbose:
             print(f"  uploading {video.stem}.wav ({size_mb:.1f} MB)", flush=True)
@@ -153,6 +210,14 @@ def main() -> None:
         default=None,
         help="Optional number of speakers when known. Improves diarization accuracy.",
     )
+    ap.add_argument(
+        "--audio-track",
+        type=int,
+        default=0,
+        help="Zero-based audio track to transcribe. OBS writes the game on track 0 "
+             "and the mic on track 1; without this ffmpeg applies its default audio "
+             "stream selection, which picks the track with the most channels.",
+    )
     args = ap.parse_args()
 
     video = args.video.resolve()
@@ -168,6 +233,7 @@ def main() -> None:
         api_key=api_key,
         language=args.language,
         num_speakers=args.num_speakers,
+        audio_track=args.audio_track,
     )
 
 
