@@ -110,13 +110,26 @@ def _sample_frame_stats(
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as f:
         metadata_path = f.name
 
+    # ffmpeg's filtergraph parser treats both ':' and '\' as syntax (option
+    # separator / escape char). On Windows, tempfile.NamedTemporaryFile()
+    # returns a path like C:\Users\...\tmpXXXX.txt — passed raw into the
+    # metadata=print:file=... filter option, the drive-letter colon and the
+    # backslashes both trip the parser (same failure mode as the subtitles
+    # path in render.py). Normalize to forward slashes first (ffmpeg accepts
+    # them on every platform, including Windows), then escape the
+    # drive-letter colon and any literal quotes. POSIX temp paths have no
+    # backslashes, so the replace is a no-op there. `metadata_path` itself
+    # (used below with plain `open()`) stays untouched.
+    metadata_path_filter = metadata_path.replace("\\", "/")
+    metadata_path_filter = metadata_path_filter.replace(":", r"\:").replace("'", r"\'")
+
     try:
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats",
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file='{metadata_path_filter}'",
             "-f", "null", "-",
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
