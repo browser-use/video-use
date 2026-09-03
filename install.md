@@ -153,6 +153,7 @@ Tell the user, in one short message:
 ## Cold-start reminders
 
 - Symlink the **whole directory**, not just `SKILL.md`. The helpers need to sit next to it.
+- **Windows:** set `PYTHONIOENCODING=utf-8` before verifying anything. The helpers print `→` and `✓`, which raise `UnicodeEncodeError` on a cp1252 console and take down the run before it reaches ffmpeg — `setx PYTHONIOENCODING utf-8` makes it stick for new shells. A symlink also needs admin, so register the skill with a directory junction instead: `New-Item -ItemType Junction -Path $HOME\.claude\skillsideo-use -Target $HOME\Developerideo-use`.
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
 - `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
