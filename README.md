@@ -27,10 +27,10 @@ Paste into Claude Code, Codex, Hermes, Openclaw, or any agent with shell access:
 ```text
 Set up https://github.com/browser-use/video-use for me.
 
-Read install.md first to install this repo, wire up ffmpeg, register the skill with whichever agent you're running under, and set up the ElevenLabs API key — ask me to paste it when you need it. Then read SKILL.md for daily usage, and always read helpers/ because that's where the editing scripts live. After install, don't transcribe anything on your own — just tell me it's ready and wait for me to drop footage into a folder.
+Read install.md first to install this repo, wire up ffmpeg, register the skill with whichever agent you're running under, and set up transcription — ask me whether to paste an ElevenLabs API key or use the free local engine when you get there. Then read SKILL.md for daily usage, and always read helpers/ because that's where the editing scripts live. After install, never run a paid Scribe transcription on your own (the free local check in install.md is fine) — just tell me it's ready and wait for me to drop footage into a folder.
 ```
 
-The agent handles the clone, dependencies, skill registration, and prompts you once for your ElevenLabs API key (grab one at [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys)).
+The agent handles the clone, dependencies, skill registration, and asks you once how to transcribe: an ElevenLabs API key (grab one at [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys)) for the best transcripts, or a local Whisper model that runs on your machine with no key.
 
 Then point your agent at a folder of raw takes:
 
@@ -63,9 +63,12 @@ uv sync                         # or: pip install -e .
 brew install ffmpeg             # required
 brew install yt-dlp             # optional, for downloading online sources
 
-# 3. Add your ElevenLabs API key
+# 3. Choose transcription: an ElevenLabs API key, or the local engine
 cp .env.example .env
-$EDITOR .env                    # ELEVENLABS_API_KEY=...
+$EDITOR .env                    # ELEVENLABS_API_KEY=...   or   VIDEO_USE_TRANSCRIBER=local
+# local engine only: probe the machine, then run the install command it prints
+python helpers/local_stt.py probe
+uv sync --extra <extra the probe printed>   # stt-mlx on Apple Silicon, stt-cpu, or stt-cuda
 ```
 
 ## How it works
@@ -76,7 +79,7 @@ The LLM never watches the video. It **reads** it — through two layers that tog
   <img src="static/timeline-view.svg" alt="timeline_view composite — filmstrip + speaker track + waveform + word labels + silence-gap cut candidates" width="100%">
 </p>
 
-**Layer 1 — Audio transcript (always loaded).** One ElevenLabs Scribe call per source gives word-level timestamps, speaker diarization, and audio events (`(laughter)`, `(applause)`, `(sigh)`). All takes pack into a single ~12KB `takes_packed.md` — the LLM's primary reading view.
+**Layer 1 — Audio transcript (always loaded).** One ElevenLabs Scribe call per source (or one local Whisper pass, see `install.md`) gives word-level timestamps; Scribe adds speaker diarization and audio events (`(laughter)`, `(applause)`, `(sigh)`). All takes pack into a single ~12KB `takes_packed.md` — the LLM's primary reading view.
 
 ```
 ## C0103  (duration: 43.0s, 8 phrases)
