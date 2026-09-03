@@ -1,16 +1,37 @@
-"""Transcribe a video with ElevenLabs Scribe.
+"""Transcribe a video with ElevenLabs Scribe (default) or BW Labs STT.
 
-Extracts mono 16kHz audio via ffmpeg, uploads to Scribe with verbatim +
-diarize + audio events + word-level timestamps, writes the full response
-to <edit_dir>/transcripts/<video_stem>.json.
+ElevenLabs Scribe: HTTP multipart upload, word-level timestamps, speaker
+diarization, and audio events.  Requires ELEVENLABS_API_KEY.
 
-Cached: if the output file already exists, the upload is skipped.
+BW Labs STT: WebSocket streaming, no duration limit, no speaker diarization,
+no language selection.  Requires BW_STT_API_KEY and the websockets library.
+  Get a key:  https://labs.bandwidth.com/
+  API docs:   https://labs.bandwidth.com/docs/speech-to-text
+  Install:    pip install websockets
+         or:  pip install "video-use[bw-stt]"
+
+Provider selection (highest priority first):
+  1. --provider {elevenlabs,bw_stt} CLI flag
+  2. TRANSCRIBE_PROVIDER environment variable or .env entry
+  3. Auto-detect: whichever API key is present (ElevenLabs wins if both)
+
+Output JSON schema (both providers):
+  {"words": [{"type": "word", "text": "...", "start": 0.0, "end": 0.0,
+              "speaker_id": "speaker_0"}, ...],
+   "text": "...", "audio_duration_seconds": 0.0}
+
+ElevenLabs responses also include "spacing" and "audio_event" word entries.
+pack_transcripts.py handles all three types.
+
+Cached: if the output file already exists, the API call is skipped.
 
 Usage:
     python helpers/transcribe.py <video_path>
     python helpers/transcribe.py <video_path> --edit-dir /custom/edit
     python helpers/transcribe.py <video_path> --language en
     python helpers/transcribe.py <video_path> --num-speakers 2
+    python helpers/transcribe.py <video_path> --provider bw_stt
+    python helpers/transcribe.py <video_path> --audio-track 1
 """
 
 from __future__ import annotations
@@ -31,9 +52,11 @@ import requests
 
 
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+PROVIDERS = ("elevenlabs", "bw_stt")
 
 
-def load_api_key() -> str:
+def _find_env_value(key_name: str) -> str:
+    """Return the value of *key_name* from .env or environment, or '' if absent."""
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
             for line in candidate.read_text().splitlines():
@@ -41,12 +64,52 @@ def load_api_key() -> str:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 k, v = line.split("=", 1)
-                if k.strip() == "ELEVENLABS_API_KEY":
+                if k.strip() == key_name:
                     return v.strip().strip('"').strip("'")
-    v = os.environ.get("ELEVENLABS_API_KEY", "")
+    return os.environ.get(key_name, "")
+
+
+def load_api_key(provider: str = "elevenlabs") -> str:
+    env_var = "ELEVENLABS_API_KEY" if provider == "elevenlabs" else "BW_STT_API_KEY"
+    v = _find_env_value(env_var)
     if not v:
-        sys.exit("ELEVENLABS_API_KEY not found in .env or environment")
+        sys.exit(f"{env_var} not found in .env or environment")
     return v
+
+
+def detect_provider() -> str:
+    """Return the provider whose API key is available; ElevenLabs wins if both are set."""
+    if _find_env_value("ELEVENLABS_API_KEY"):
+        return "elevenlabs"
+    if _find_env_value("BW_STT_API_KEY"):
+        return "bw_stt"
+    sys.exit(
+        "No transcription API key found. "
+        "Set ELEVENLABS_API_KEY (ElevenLabs Scribe) or BW_STT_API_KEY (BW Labs STT) "
+        "in .env or the environment."
+    )
+
+
+def resolve_provider(provider: str | None = None) -> str:
+    """Resolve the provider using the three-tier priority order.
+
+    1. *provider* argument (from --provider CLI flag)
+    2. TRANSCRIBE_PROVIDER in .env or environment
+    3. Auto-detection from available API keys
+    """
+    if provider is not None:
+        if provider not in PROVIDERS:
+            sys.exit(f"Unknown provider '{provider}'. Choose from: {', '.join(PROVIDERS)}")
+        return provider
+    env_prov = _find_env_value("TRANSCRIBE_PROVIDER")
+    if env_prov:
+        if env_prov not in PROVIDERS:
+            sys.exit(
+                f"TRANSCRIBE_PROVIDER='{env_prov}' is not valid. "
+                f"Choose from: {', '.join(PROVIDERS)}"
+            )
+        return env_prov
+    return detect_provider()
 
 
 def count_audio_tracks(video_path: Path) -> int:
@@ -113,6 +176,90 @@ def call_scribe(
     return resp.json()
 
 
+def _call_bw_stt(audio: Path, api_key: str) -> dict:
+    """Stream *audio* to BW Labs STT via WebSocket; return a normalised transcript dict.
+
+    Uses the public WebSocket API directly — no SDK required, only websockets (PyPI).
+    API docs: https://labs.bandwidth.com/docs/speech-to-text
+    """
+    try:
+        import websockets.sync.client as ws_sync
+    except ImportError:
+        sys.exit(
+            "websockets is required for BW Labs STT.\n"
+            "Install it: pip install websockets\n"
+            '       or: pip install "video-use[bw-stt]"'
+        )
+
+    import threading
+
+    ENDPOINT = (
+        "wss://api.labs.bandwidth.com/audio/v1/listen"
+        "?encoding=linear16&sample_rate=16000&channels=1&mode=instant"
+    )
+    FRAMES_PER_CHUNK = 2560  # 160ms × 16 kHz mono (2560 samples × 2 bytes = 5120 bytes)
+    MIN_FRAME_BYTES = 640    # API minimum frame duration is 20ms = 320 samples × 2 bytes
+
+    all_words: list[dict] = []
+    text_parts: list[str] = []
+    audio_duration = 0.0
+
+    with ws_sync.connect(ENDPOINT, additional_headers={"X-BW-LABS-API-KEY": api_key}) as ws:
+        msg = json.loads(ws.recv())
+        if msg["type"] != "SessionOpened":
+            raise RuntimeError(f"unexpected opening message: {msg['type']}")
+
+        # Send from a separate thread so the main thread drains Segment messages
+        # as they stream in. The server transcribes while audio uploads; reading
+        # only after sending everything would stall long files once the client's
+        # receive buffer fills.
+        send_error: list[BaseException] = []
+
+        def _send_audio() -> None:
+            try:
+                # wave.open strips the WAV header; readframes() returns raw PCM
+                with wave.open(str(audio), "rb") as wf:
+                    while frames := wf.readframes(FRAMES_PER_CHUNK):
+                        if len(frames) < MIN_FRAME_BYTES:
+                            # Pad a short tail with silence to the 20ms API minimum
+                            frames += b"\x00" * (MIN_FRAME_BYTES - len(frames))
+                        ws.send(frames)
+                ws.send(json.dumps({"type": "CloseStream"}))
+            except BaseException as e:  # surfaced after the recv loop ends
+                send_error.append(e)
+
+        sender = threading.Thread(target=_send_audio, daemon=True)
+        sender.start()
+
+        for raw in ws:
+            msg = json.loads(raw)
+            if msg["type"] == "Segment":
+                text_parts.append(msg["text"])
+                for w in msg.get("words", []):
+                    all_words.append({
+                        "type": "word",
+                        "text": w["word"],
+                        "start": w["start"],
+                        "end": w["end"],
+                        "speaker_id": "speaker_0",
+                    })
+            elif msg["type"] == "SessionClosed":
+                audio_duration = msg.get("audio_duration_seconds", 0.0)
+                break
+            elif msg["type"] == "Error":
+                raise RuntimeError(f"BW STT error {msg['code']}: {msg['message']}")
+
+        sender.join(timeout=10)
+        if send_error:
+            raise RuntimeError(f"BW STT send failed: {send_error[0]}") from send_error[0]
+
+    return {
+        "words": all_words,
+        "text": "".join(text_parts),
+        "audio_duration_seconds": audio_duration,
+    }
+
+
 def transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
     """Where a video's transcript lands.
 
@@ -133,6 +280,7 @@ def transcribe_one(
     num_speakers: int | None = None,
     verbose: bool = True,
     audio_track: int = 0,
+    provider: str = "elevenlabs",
 ) -> Path:
     """Transcribe a single video. Returns path to transcript JSON.
 
@@ -173,9 +321,23 @@ def transcribe_one(
             )
 
         size_mb = audio.stat().st_size / (1024 * 1024)
-        if verbose:
-            print(f"  uploading {video.stem}.wav ({size_mb:.1f} MB)", flush=True)
-        payload = call_scribe(audio, api_key, language, num_speakers)
+
+        if provider == "elevenlabs":
+            if verbose:
+                print(f"  uploading {video.stem}.wav ({size_mb:.1f} MB) to ElevenLabs Scribe",
+                      flush=True)
+            payload = call_scribe(audio, api_key, language, num_speakers)
+        else:  # bw_stt
+            if verbose:
+                if language:
+                    print("  note: BW Labs STT auto-detects language; --language is ignored",
+                          flush=True)
+                if num_speakers:
+                    print("  note: BW Labs STT is single-channel; --num-speakers is ignored",
+                          flush=True)
+                print(f"  streaming {video.stem}.wav ({size_mb:.1f} MB) to BW Labs STT",
+                      flush=True)
+            payload = _call_bw_stt(audio, api_key)
 
     out_path.write_text(json.dumps(payload, indent=2))
     dt = time.time() - t0
@@ -190,7 +352,9 @@ def transcribe_one(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Transcribe a video with ElevenLabs Scribe")
+    ap = argparse.ArgumentParser(
+        description="Transcribe a video with ElevenLabs Scribe or BW Labs STT"
+    )
     ap.add_argument("video", type=Path, help="Path to video file")
     ap.add_argument(
         "--edit-dir",
@@ -202,13 +366,13 @@ def main() -> None:
         "--language",
         type=str,
         default=None,
-        help="Optional ISO language code (e.g., 'en'). Omit to auto-detect.",
+        help="ISO language code (e.g., 'en'). ElevenLabs only; omit to auto-detect.",
     )
     ap.add_argument(
         "--num-speakers",
         type=int,
         default=None,
-        help="Optional number of speakers when known. Improves diarization accuracy.",
+        help="Number of speakers when known. ElevenLabs only; improves diarization.",
     )
     ap.add_argument(
         "--audio-track",
@@ -218,6 +382,16 @@ def main() -> None:
              "and the mic on track 1; without this ffmpeg applies its default audio "
              "stream selection, which picks the track with the most channels.",
     )
+    ap.add_argument(
+        "--provider",
+        choices=PROVIDERS,
+        default=None,
+        help=(
+            "Transcription backend (default: auto-detect from available API keys; "
+            "ElevenLabs wins if both are set). Override globally with "
+            "TRANSCRIBE_PROVIDER env var."
+        ),
+    )
     args = ap.parse_args()
 
     video = args.video.resolve()
@@ -225,7 +399,8 @@ def main() -> None:
         sys.exit(f"video not found: {video}")
 
     edit_dir = (args.edit_dir or (video.parent / "edit")).resolve()
-    api_key = load_api_key()
+    provider = resolve_provider(args.provider)
+    api_key = load_api_key(provider)
 
     transcribe_one(
         video=video,
@@ -234,6 +409,7 @@ def main() -> None:
         language=args.language,
         num_speakers=args.num_speakers,
         audio_track=args.audio_track,
+        provider=provider,
     )
 
 

@@ -1,7 +1,9 @@
-"""Batch-transcribe every video in a directory with 4 parallel workers.
+"""Batch-transcribe every video in a directory with parallel workers.
 
-Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
-each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
+Walks <videos_dir> for common video extensions, transcribes each via the
+configured provider (ElevenLabs Scribe by default, or BW Labs STT via
+--provider / TRANSCRIBE_PROVIDER), writes transcripts to
+<videos_dir>/edit/transcripts/<name>.json.
 
 Cached per-file: any source that already has a transcript is skipped.
 
@@ -10,6 +12,7 @@ Usage:
     python helpers/transcribe_batch.py <videos_dir> --workers 4
     python helpers/transcribe_batch.py <videos_dir> --num-speakers 2
     python helpers/transcribe_batch.py <videos_dir> --edit-dir /custom/edit
+    python helpers/transcribe_batch.py <videos_dir> --provider bw_stt
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one, transcript_path
+from transcribe import PROVIDERS, load_api_key, resolve_provider, transcribe_one, transcript_path
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -62,6 +65,12 @@ def main() -> None:
         default=0,
         help="Zero-based audio track to transcribe (OBS: 0 = game, 1 = mic).",
     )
+    ap.add_argument(
+        "--provider",
+        choices=PROVIDERS,
+        default=None,
+        help="Transcription backend (default: auto-detect from available API keys).",
+    )
     args = ap.parse_args()
 
     videos_dir = args.videos_dir.resolve()
@@ -84,8 +93,9 @@ def main() -> None:
         print("nothing to do")
         return
 
-    api_key = load_api_key()
-
+    provider = resolve_provider(args.provider)
+    api_key = load_api_key(provider)
+    print(f"provider: {provider}")
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()
 
@@ -101,6 +111,7 @@ def main() -> None:
                 num_speakers=args.num_speakers,
                 verbose=False,
                 audio_track=args.audio_track,
+                provider=provider,
             ): v
             for v in pending
         }
