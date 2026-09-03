@@ -20,11 +20,10 @@ import json
 import sys
 from pathlib import Path
 
-
-def configure_stdout() -> None:
-    """Keep progress output safe when the locale encoding is not UTF-8."""
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+try:
+    from _util import configure_stdout
+except ModuleNotFoundError:
+    from helpers._util import configure_stdout
 
 
 def format_time(seconds: float) -> str:
