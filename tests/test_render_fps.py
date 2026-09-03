@@ -97,6 +97,8 @@ class RenderRateTests(unittest.TestCase):
             edit_dir = Path(temp_dir)
             with (
                 patch.object(render, "probe_source_fps", return_value="60/1") as probe,
+                patch.object(render, "is_portrait_source", return_value=False),
+                patch.object(render, "is_hdr_source", return_value=False),
                 patch.object(render, "extract_segment") as extract,
             ):
                 with contextlib.redirect_stdout(io.StringIO()):
@@ -109,6 +111,8 @@ class RenderRateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
                 patch.object(render, "probe_source_fps") as probe,
+                patch.object(render, "is_portrait_source", return_value=False),
+                patch.object(render, "is_hdr_source", return_value=False),
                 patch.object(render, "extract_segment") as extract,
                 contextlib.redirect_stdout(io.StringIO()),
             ):
@@ -126,6 +130,8 @@ class RenderRateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with (
                 patch.object(render, "probe_source_fps", return_value=None),
+                patch.object(render, "is_portrait_source", return_value=False),
+                patch.object(render, "is_hdr_source", return_value=False),
                 patch.object(render, "extract_segment") as extract,
                 contextlib.redirect_stdout(io.StringIO()),
             ):

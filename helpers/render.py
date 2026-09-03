@@ -240,6 +240,8 @@ def extract_segment(
     preview: bool = False,
     draft: bool = False,
     rate: str | None = None,
+    portrait: bool | None = None,
+    hdr: bool | None = None,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -253,14 +255,21 @@ def extract_segment(
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    portrait = is_portrait_source(source)
+    # `portrait` and `hdr` depend only on the source file, never on the cut
+    # range. extract_all_segments probes each source once and passes the answers
+    # in; probe here only when called standalone.
+    if portrait is None:
+        portrait = is_portrait_source(source)
     if draft:
         scale = "scale=-2:1280" if portrait else "scale=1280:-2"
     else:
         scale = "scale=-2:1920" if portrait else "scale=1920:-2"
 
+    if hdr is None:
+        hdr = is_hdr_source(source)
+
     vf_parts: list[str] = []
-    if is_hdr_source(source):
+    if hdr:
         vf_parts.append(TONEMAP_CHAIN)
     vf_parts.append(scale)
     if grade_filter:
@@ -337,6 +346,15 @@ def extract_all_segments(
     else:
         out_rate = "24"
 
+    # One orientation + HDR probe per distinct source, not per range. A 40-range
+    # EDL over 2 sources drops from 80 ffprobe calls to 4.
+    source_facts: dict[Path, tuple[bool, bool]] = {}
+
+    def facts_for(path: Path) -> tuple[bool, bool]:
+        if path not in source_facts:
+            source_facts[path] = (is_portrait_source(path), is_hdr_source(path))
+        return source_facts[path]
+
     seg_paths: list[Path] = []
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  @ {out_rate} fps"
           f"{' (forced)' if fps is not None else ' (from source)'}")
@@ -359,7 +377,12 @@ def extract_all_segments(
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate)
+        portrait, hdr = facts_for(src_path)
+        extract_segment(
+            src_path, start, duration, seg_filter, out_path,
+            preview=preview, draft=draft, rate=out_rate,
+            portrait=portrait, hdr=hdr,
+        )
         seg_paths.append(out_path)
 
     return seg_paths
