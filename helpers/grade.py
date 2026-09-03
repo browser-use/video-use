@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -75,6 +76,21 @@ def get_preset(name: str) -> str:
 # -------- Auto grade (data-driven, per-clip) --------------------------------
 
 
+def ffpath(p) -> str:
+    """Escape a filesystem path for embedding in an ffmpeg filter argument.
+
+    The filter parser treats ":" as an option separator and backslash as an
+    escape, so a raw Windows path is mangled. Forward slashes plus an escaped
+    drive colon parse correctly. No-op off Windows.
+    """
+    p = str(p)
+    if os.name != "nt":
+        return p
+    # Unquoted filter-option context: the drive colon must survive both the
+    # filtergraph and the filter-argument parser, hence the doubled escape.
+    return p.replace("\\", "/").replace(":", r"\\:")
+
+
 def _sample_frame_stats(
     video: Path,
     start: float,
@@ -106,7 +122,7 @@ def _sample_frame_stats(
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={ffpath(metadata_path)}",
             "-f", "null", "-",
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
