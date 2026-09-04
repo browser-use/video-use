@@ -475,3 +475,104 @@ class MixCoverageRegressionTests(unittest.TestCase):
                     edit_dir / "out.mp4", edit_dir,
                 )
         self.assertTrue(wrote)
+
+
+class FpsResolutionTests(unittest.TestCase):
+    """Frame rate must come from a moving source, never from a still.
+
+    ffprobe reports a nominal 25 fps for a JPEG. A montage that opens on a
+    photo therefore forced 25 fps onto 30 fps footage and made the motion
+    judder — the whole reel resampled because of the first shot's file type.
+    """
+
+    def _rate_for(self, order):
+        used = []
+
+        def fake_extract(src, start, duration, filt, out, **kw):
+            used.append(kw["rate"])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(b"x")
+
+        def fake_probe(path):
+            return {"still.jpg": "25/1", "clip.mp4": "30/1"}.get(Path(path).name)
+
+        with tempfile.TemporaryDirectory() as td:
+            edit_dir = Path(td)
+            edl = {
+                "sources": {"s": "still.jpg", "v": "clip.mp4"},
+                "ranges": [{"source": k, "start": 0, "end": 2} for k in order],
+            }
+            with patch.object(render, "extract_segment", side_effect=fake_extract), \
+                 patch.object(render, "is_still_image",
+                              side_effect=lambda p: Path(p).name == "still.jpg"), \
+                 patch.object(render, "probe_source_fps", side_effect=fake_probe), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                render.extract_all_segments(edl, edit_dir, preview=False)
+        return used
+
+    def test_stills_first_still_picks_the_moving_sources_rate(self):
+        rates = self._rate_for(["s", "s", "v"])
+        self.assertEqual(set(rates), {"30/1"})
+
+    def test_every_segment_shares_one_rate(self):
+        # The -c copy concat requires it.
+        self.assertEqual(len(set(self._rate_for(["s", "v", "s", "v"]))), 1)
+
+    def test_all_stills_falls_back_rather_than_using_a_still_rate(self):
+        self.assertEqual(set(self._rate_for(["s", "s"])), {"24"})
+
+
+class PerRangeGradeTests(unittest.TestCase):
+    """A per-range grade overrides the EDL-wide one.
+
+    A montage cuts between sources with wildly different exposure (blown-white
+    ice against a dim room); one global grade cannot reconcile them, and the
+    auto-grade is bounded to +/-8% and too gentle to try.
+    """
+
+    def _filters(self, edl_extra, ranges):
+        seen = []
+
+        def fake_extract(src, start, duration, filt, out, **kw):
+            seen.append(filt)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(b"x")
+
+        with tempfile.TemporaryDirectory() as td:
+            edit_dir = Path(td)
+            edl = {"sources": {"a": "a.mp4"}, "ranges": ranges}
+            edl.update(edl_extra)
+            with patch.object(render, "extract_segment", side_effect=fake_extract), \
+                 patch.object(render, "is_still_image", return_value=False), \
+                 patch.object(render, "probe_source_fps", return_value="30/1"), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                render.extract_all_segments(edl, edit_dir, preview=False)
+        return seen
+
+    def test_per_range_grade_wins_over_the_edl_wide_grade(self):
+        out = self._filters(
+            {"grade": "eq=contrast=1.03"},
+            [
+                {"source": "a", "start": 0, "end": 2},
+                {"source": "a", "start": 2, "end": 4, "grade": "eq=gamma=0.60"},
+            ],
+        )
+        self.assertEqual(out[0], "eq=contrast=1.03")
+        self.assertEqual(out[1], "eq=gamma=0.60")
+
+    def test_ranges_without_a_grade_are_unaffected(self):
+        out = self._filters(
+            {"grade": "eq=contrast=1.03"},
+            [{"source": "a", "start": 0, "end": 2}] * 3,
+        )
+        self.assertEqual(set(out), {"eq=contrast=1.03"})
+
+    def test_per_range_auto_resolves_per_segment(self):
+        with patch.object(render, "auto_grade_for_clip",
+                          return_value=("eq=gamma=1.02", {})) as auto:
+            out = self._filters(
+                {},
+                [{"source": "a", "start": 0, "end": 2, "grade": "auto"}],
+            )
+        auto.assert_called_once()
+        self.assertEqual(out, ["eq=gamma=1.02"])

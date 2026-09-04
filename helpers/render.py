@@ -448,11 +448,20 @@ def extract_all_segments(
     # Explicit --fps wins; otherwise preserve the first source's rate.
     if fps is not None:
         out_rate = parse_fps(str(fps))
-    elif ranges:
-        first_src = resolve_path(sources[ranges[0]["source"]], edit_dir)
-        out_rate = probe_source_fps(first_src) or "24"
     else:
-        out_rate = "24"
+        # Resolve the rate from the first MOVING source. Probing a still image
+        # yields a meaningless nominal rate (ffprobe reports 25 for a JPEG),
+        # and a montage that opens on a photo would otherwise force that rate
+        # onto real footage and make the motion judder.
+        out_rate = None
+        for r in ranges:
+            src = resolve_path(sources[r["source"]], edit_dir)
+            if is_still_image(src):
+                continue
+            out_rate = probe_source_fps(src)
+            if out_rate:
+                break
+        out_rate = out_rate or "24"
 
     seg_paths: list[Path] = []
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  @ {out_rate} fps"
@@ -470,7 +479,18 @@ def extract_all_segments(
         duration = end - start
         out_path = clips_dir / f"seg_{i:02d}_{src_name}.mp4"
 
-        if is_auto:
+        # A per-range "grade" overrides the EDL-wide one. Montages cut between
+        # sources with very different exposure — blown-white ice against a dim
+        # room — and a single global grade cannot reconcile them, while the
+        # auto-grade is deliberately bounded to +/-8% and is too gentle to try.
+        if r.get("grade") is not None:
+            seg_resolved = resolve_grade_filter(r["grade"])
+            if seg_resolved == "__AUTO__":
+                seg_filter, _stats = auto_grade_for_clip(
+                    src_path, start=start, duration=duration, verbose=False)
+            else:
+                seg_filter = seg_resolved
+        elif is_auto:
             seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
         else:
             seg_filter = resolved

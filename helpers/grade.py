@@ -75,6 +75,25 @@ def get_preset(name: str) -> str:
 # -------- Auto grade (data-driven, per-clip) --------------------------------
 
 
+# Codecs ffprobe reports for single-frame image inputs. A still must be looped
+# to be analyzable: seeking into one frame yields no samples at all, and the
+# analysis then silently falls back to neutral defaults — so every photo in a
+# montage gets the same canned correction regardless of how it actually looks.
+STILL_IMAGE_CODECS = {"mjpeg", "png", "bmp", "tiff", "webp", "gif", "jpeg2000", "ppm"}
+
+
+def _is_still_image(path: Path) -> bool:
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(path)],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip().lower()
+        return out in STILL_IMAGE_CODECS
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
 def _sample_frame_stats(
     video: Path,
     start: float,
@@ -101,11 +120,18 @@ def _sample_frame_stats(
         metadata_path = f.name
 
     try:
-        cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-nostats",
-            "-ss", f"{start:.3f}",
-            "-i", str(video),
-            "-t", f"{duration:.3f}",
+        if _is_still_image(video):
+            # One frame, looped: no seek (there is no timeline to seek into).
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-nostats",
+                "-loop", "1", "-i", str(video), "-t", f"{duration:.3f}",
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-nostats",
+                "-ss", f"{start:.3f}", "-i", str(video), "-t", f"{duration:.3f}",
+            ]
+        cmd += [
             "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
             "-f", "null", "-",
         ]
