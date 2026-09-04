@@ -8,6 +8,7 @@ whose spine is a song had no path through this renderer.
 """
 
 import importlib.util
+import subprocess
 import io
 import contextlib
 import json
@@ -297,3 +298,88 @@ class CanvasEdlWiringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealFootageRegressionTests(unittest.TestCase):
+    """Three defects found only by feeding real footage through the renderer.
+
+    Synthetic clips cut from one source share codec parameters and are always
+    moving video, so none of these surfaced until a real LiveBarn export (mono
+    audio) and real iPhone stills (single-frame JPEGs) went in.
+    """
+
+    def _cmd(self, *, still=False, has_audio=True):
+        captured = {}
+
+        def fake_run(cmd, *a, **kw):
+            captured["cmd"] = cmd
+            return unittest.mock.Mock(returncode=0, stdout=b"", stderr=b"")
+
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(render, "is_portrait_source", return_value=False), \
+                 patch.object(render, "is_hdr_source", return_value=False), \
+                 patch.object(render, "is_still_image", return_value=still), \
+                 patch.object(render, "has_audio_stream", return_value=has_audio), \
+                 patch.object(render.subprocess, "run", side_effect=fake_run):
+                render.extract_segment(
+                    Path("src"), 5.0, 3.0, "", Path(td) / "seg.mp4", rate="30/1",
+                )
+        return captured["cmd"]
+
+    # --- 1. mono source collapsed the whole reel to mono -------------------
+    def test_channel_count_is_forced_uniform(self):
+        # The concat demuxer takes parameters from the FIRST segment, so one
+        # mono source (a LiveBarn export) silently made the entire montage mono
+        # — including the stereo music bed mixed on afterwards.
+        cmd = self._cmd()
+        self.assertEqual(cmd[cmd.index("-ac") + 1], "2")
+
+    def test_channel_count_forced_for_silent_sources_too(self):
+        cmd = self._cmd(has_audio=False)
+        self.assertEqual(cmd[cmd.index("-ac") + 1], "2")
+
+    # --- 2. stills produced a segment with no video frames ----------------
+    def test_still_image_is_looped(self):
+        # Without -loop 1 ffmpeg decodes exactly one frame; the segment then
+        # reports a duration borrowed from its audio but has no real video, and
+        # the concatenated timeline comes out the wrong length.
+        cmd = self._cmd(still=True)
+        self.assertIn("-loop", cmd)
+        self.assertEqual(cmd[cmd.index("-loop") + 1], "1")
+        self.assertEqual(cmd[cmd.index("-t") + 1], "3.000")
+
+    def test_still_image_is_not_seeked(self):
+        # -ss into a single frame seeks past the end and yields nothing.
+        self.assertNotIn("-ss", self._cmd(still=True))
+
+    def test_moving_source_is_still_seeked(self):
+        cmd = self._cmd(still=False)
+        self.assertEqual(cmd[cmd.index("-ss") + 1], "5.000")
+        self.assertNotIn("-loop", cmd)
+
+    # --- 3. stills carry no audio, so they need synthesized silence -------
+    def test_still_image_gets_synthesized_audio(self):
+        cmd = self._cmd(still=True, has_audio=True)
+        self.assertIn("anullsrc=channel_layout=stereo:sample_rate=48000", cmd)
+
+
+class StillImageDetectionTests(unittest.TestCase):
+    def _detect(self, codec_name):
+        result = unittest.mock.Mock(stdout=codec_name + "\n", returncode=0)
+        with patch.object(render.subprocess, "run", return_value=result):
+            return render.is_still_image(Path("x"))
+
+    def test_image_codecs_detected(self):
+        for codec in ("mjpeg", "png", "webp", "bmp"):
+            with self.subTest(codec=codec):
+                self.assertTrue(self._detect(codec))
+
+    def test_video_codecs_not_detected(self):
+        for codec in ("h264", "hevc", "vp9", "prores"):
+            with self.subTest(codec=codec):
+                self.assertFalse(self._detect(codec))
+
+    def test_probe_failure_is_not_fatal(self):
+        err = subprocess.CalledProcessError(1, "ffprobe")
+        with patch.object(render.subprocess, "run", side_effect=err):
+            self.assertFalse(render.is_still_image(Path("x")))

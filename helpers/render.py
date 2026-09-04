@@ -204,6 +204,29 @@ def blurred_fill_chain(width: int, height: int, sigma: int = CANVAS_BLUR_SIGMA) 
     )
 
 
+# Codecs ffprobe reports for single-frame image inputs.
+STILL_IMAGE_CODECS = {"mjpeg", "png", "bmp", "tiff", "webp", "gif", "jpeg2000", "ppm"}
+
+
+def is_still_image(path: Path) -> bool:
+    """True if the source is a single still image rather than a moving clip.
+
+    Stills need `-loop 1` to generate frames for the range's duration. Without
+    it ffmpeg decodes exactly one frame, and the segment ends up with a
+    container duration (borrowed from its audio) but no real video — which then
+    corrupts the concatenated timeline.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(path)],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip().lower()
+        return out in STILL_IMAGE_CODECS
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
 def has_audio_stream(video: Path) -> bool:
     """True if the file carries at least one audio stream.
 
@@ -352,12 +375,18 @@ def extract_segment(
     # own rate; fall back to 24 only if it can't be probed.
     out_rate = rate if rate is not None else (probe_source_fps(source) or "24")
 
-    cmd = ["ffmpeg", "-y", "-ss", f"{seg_start:.3f}", "-i", str(source)]
+    # A still has no timeline to seek into: loop the single frame instead, and
+    # let -t below set how long it holds.
+    still = is_still_image(source)
+    if still:
+        cmd = ["ffmpeg", "-y", "-loop", "1", "-i", str(source)]
+    else:
+        cmd = ["ffmpeg", "-y", "-ss", f"{seg_start:.3f}", "-i", str(source)]
 
     # A silent source still needs an audio stream in its segment — synthesize
     # one, so every segment is uniform for the concat and the music bed has
     # something to mix against.
-    silent_source = not has_audio_stream(source)
+    silent_source = still or not has_audio_stream(source)
     if silent_source:
         cmd += ["-f", "lavfi", "-i",
                 "anullsrc=channel_layout=stereo:sample_rate=48000",
@@ -369,7 +398,11 @@ def extract_segment(
     cmd += [
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
         "-pix_fmt", "yuv420p", "-r", out_rate,
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        # Force stereo as well as 48kHz. The concat demuxer takes its parameters
+        # from the FIRST segment, so a single mono source (a LiveBarn export, a
+        # one-mic phone clip) silently collapses the whole timeline to mono —
+        # including a stereo music bed mixed on afterwards.
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
         "-movflags", "+faststart",
         str(out_path),
     ]
