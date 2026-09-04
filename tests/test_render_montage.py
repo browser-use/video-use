@@ -207,8 +207,12 @@ class MusicBedTests(unittest.TestCase):
         self.assertNotIn("[0:a]", filt)
         self.assertIn("-shortest", cmd)
 
-    def test_normal_path_does_not_pass_shortest(self):
-        self.assertNotIn("-shortest", self._cmd_for({"source": "bed.mp3"}))
+    def test_shortest_bounds_every_path(self):
+        # The bed is looped indefinitely, so -shortest is what stops the output
+        # at the video's length on BOTH the mixed and music-only paths.
+        self.assertIn("-shortest", self._cmd_for({"source": "bed.mp3"}))
+        self.assertIn("-shortest", self._cmd_for({"source": "bed.mp3"},
+                                                 base_has_audio=False))
 
     def test_video_is_stream_copied_not_re_encoded(self):
         cmd = self._cmd_for({"source": "bed.mp3"})
@@ -218,7 +222,9 @@ class MusicBedTests(unittest.TestCase):
         cmd = self._cmd_for({"source": "bed.mp3"})
         filt = cmd[cmd.index("-filter_complex") + 1]
         self.assertIn("normalize=0", filt)
-        self.assertIn("duration=first", filt)
+        # duration=longest, not first: see MixCoverageRegressionTests — first
+        # ended the mix wherever the natural audio happened to stop.
+        self.assertIn("duration=longest", filt)
 
     def test_gains_default_to_music_over_ducked_natural(self):
         cmd = self._cmd_for({"source": "bed.mp3"})
@@ -383,3 +389,89 @@ class StillImageDetectionTests(unittest.TestCase):
         err = subprocess.CalledProcessError(1, "ffprobe")
         with patch.object(render.subprocess, "run", side_effect=err):
             self.assertFalse(render.is_still_image(Path("x")))
+
+
+class MixCoverageRegressionTests(unittest.TestCase):
+    """Two defects found by an automated review of the montage PR.
+
+    Both are silent-wrong failures: the render succeeds and the output looks
+    fine until you listen to the end of it.
+    """
+
+    def test_segment_audio_is_padded_to_the_video_duration(self):
+        # A source whose audio stream ends before its video (arena and phone
+        # exports do this) produced a segment with a short audio track. That
+        # left a hole in the concatenated timeline and ended the music mix
+        # early: a 6s clip with 2s of audio rendered 4s of silent picture.
+        captured = {}
+
+        def fake_run(cmd, *a, **kw):
+            captured["cmd"] = cmd
+            return unittest.mock.Mock(returncode=0, stdout=b"", stderr=b"")
+
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(render, "is_portrait_source", return_value=False), \
+                 patch.object(render, "is_hdr_source", return_value=False), \
+                 patch.object(render, "is_still_image", return_value=False), \
+                 patch.object(render, "has_audio_stream", return_value=True), \
+                 patch.object(render.subprocess, "run", side_effect=fake_run):
+                render.extract_segment(
+                    Path("src.mp4"), 0.0, 6.0, "", Path(td) / "seg.mp4", rate="30/1",
+                )
+        cmd = captured["cmd"]
+        af = cmd[cmd.index("-af") + 1]
+        self.assertTrue(af.endswith("apad"), af)
+        # -t is what bounds the otherwise-infinite pad.
+        self.assertEqual(cmd[cmd.index("-t") + 1], "6.000")
+
+    def test_mix_covers_full_video_even_if_base_audio_is_short(self):
+        captured = {}
+
+        def fake_run(cmd, *a, **kw):
+            captured["cmd"] = cmd
+            return unittest.mock.Mock(returncode=0, stdout=b"", stderr=b"")
+
+        with tempfile.TemporaryDirectory() as td:
+            edit_dir = Path(td)
+            (edit_dir / "bed.mp3").write_bytes(b"x")
+            with patch.object(render, "probe_duration", return_value=60.0), \
+                 patch.object(render, "has_audio_stream", return_value=True), \
+                 patch.object(render.subprocess, "run", side_effect=fake_run), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                render.mix_music_bed(
+                    edit_dir / "base.mp4", {"source": "bed.mp3"},
+                    edit_dir / "out.mp4", edit_dir,
+                )
+        cmd = captured["cmd"]
+        filt = cmd[cmd.index("-filter_complex") + 1]
+        # duration=first ended the mix at the natural-audio endpoint.
+        self.assertIn("duration=longest", filt)
+        self.assertNotIn("duration=first", filt)
+        # The bed loops forever, so -shortest is what bounds the output now.
+        self.assertIn("-shortest", cmd)
+
+    def test_mix_reports_whether_it_wrote_an_output(self):
+        with tempfile.TemporaryDirectory() as td:
+            edit_dir = Path(td)
+            with patch.object(render.subprocess, "run") as run, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                wrote = render.mix_music_bed(
+                    edit_dir / "base.mp4", {"source": "gone.mp3"},
+                    edit_dir / "out.mp4", edit_dir,
+                )
+            run.assert_not_called()
+        self.assertFalse(wrote)
+
+    def test_successful_mix_reports_true(self):
+        with tempfile.TemporaryDirectory() as td:
+            edit_dir = Path(td)
+            (edit_dir / "bed.mp3").write_bytes(b"x")
+            with patch.object(render, "probe_duration", return_value=10.0), \
+                 patch.object(render, "has_audio_stream", return_value=True), \
+                 patch.object(render.subprocess, "run"), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                wrote = render.mix_music_bed(
+                    edit_dir / "base.mp4", {"source": "bed.mp3"},
+                    edit_dir / "out.mp4", edit_dir,
+                )
+        self.assertTrue(wrote)

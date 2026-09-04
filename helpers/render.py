@@ -356,7 +356,12 @@ def extract_segment(
 
     # 30ms audio fades at both edges (Rule 3) — prevent pops
     fade_out_start = max(0.0, duration - 0.03)
-    af = f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+    # `apad` + the `-t` below guarantees the audio runs exactly as long as the
+    # video. A source whose audio stream ends before its video (common in arena
+    # and phone exports) otherwise yields a segment with a short audio track,
+    # which leaves a hole in the concatenated timeline and truncates the mix.
+    af = (f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+          f",apad")
     if mute:
         # Silence rather than drop: every segment must keep an audio stream or
         # the `-c copy` concat produces a file with gaps in its audio timeline.
@@ -535,8 +540,10 @@ def mix_music_bed(
     music_cfg: dict,
     out_path: Path,
     edit_dir: Path,
-) -> None:
+) -> bool:
     """Mix a music bed under the video's existing audio. Video is stream-copied.
+
+    Returns True if an output was written, False if the bed was skipped.
 
     EDL shape:
         "music": {
@@ -554,7 +561,7 @@ def mix_music_bed(
     src = resolve_path(str(music_cfg["source"]), edit_dir)
     if not src.exists():
         print(f"warning: music source does not exist, skipping bed: {src}")
-        return
+        return False
 
     gain = float(music_cfg.get("gain", MUSIC_GAIN))
     natural = float(music_cfg.get("natural_gain", MUSIC_NATURAL_GAIN))
@@ -568,14 +575,16 @@ def mix_music_bed(
 
     # A base with no audio at all (every source silent) has no [0:a] to mix —
     # use the bed alone rather than failing the render. That path needs
-    # `-shortest`, because amix's `duration=first` is what otherwise stops the
-    # infinitely looped bed at the video's length.
+    # `-shortest` on every path: the bed is looped indefinitely, so it is
+    # `-shortest` (not amix) that stops the output at the video's length.
+    # `duration=longest` means a base whose audio ends early still gets scored
+    # all the way to the end of the picture.
     base_has_audio = has_audio_stream(video_path)
     if base_has_audio:
         filt = (
             f"[0:a]volume={natural}[nat];"
             f"[1:a]{music_chain}[bed];"
-            f"[nat][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+            f"[nat][bed]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
         )
         natural_note = f"natural {natural}"
     else:
@@ -594,10 +603,10 @@ def mix_music_bed(
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
     ]
-    if not base_has_audio:
-        cmd.append("-shortest")
+    cmd.append("-shortest")
     cmd.append(str(out_path))
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    return True
 
 
 # -------- Master SRT (Rule 5) ------------------------------------------------
@@ -961,8 +970,11 @@ def main() -> None:
     music_cfg = edl.get("music")
     if music_cfg and not args.no_music:
         mixed_path = base_path.with_name(base_path.stem + "_music.mp4")
-        mix_music_bed(base_path, music_cfg, mixed_path, edit_dir)
-        if mixed_path.exists():
+        # Clear any output from a previous render first: if the bed is missing
+        # this time, mix_music_bed writes nothing, and a leftover file would
+        # otherwise be picked up and scored into this render silently.
+        mixed_path.unlink(missing_ok=True)
+        if mix_music_bed(base_path, music_cfg, mixed_path, edit_dir):
             base_path = mixed_path
 
     # 3. Subtitles: build if requested, resolve final path
