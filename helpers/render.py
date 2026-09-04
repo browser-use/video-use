@@ -172,6 +172,80 @@ def is_portrait_source(video: Path) -> bool:
         return False
 
 
+# -------- Blurred-fill canvas (mixed-orientation montages) -------------------
+#
+# The default scale preserves each source's own orientation, so a portrait clip
+# becomes 1080x1920 while a landscape clip becomes 1920x1080. Segments with
+# different dimensions cannot be concatenated with `-c copy` (Rule 2), so a
+# montage mixing phone verticals with landscape footage has no lossless path.
+#
+# The fix is to render EVERY segment onto one fixed canvas: a zoomed, blurred
+# copy of the frame fills the canvas edge-to-edge, and the sharp aspect-correct
+# frame sits centred on top. Landscape fills it completely; portrait gets a
+# blurred pillarbox instead of black bars. Same dimensions for every segment, so
+# the lossless concat still works.
+
+CANVAS_BLUR_SIGMA = 20
+
+
+def blurred_fill_chain(width: int, height: int, sigma: int = CANVAS_BLUR_SIGMA) -> str:
+    """Filter chain fitting ANY source aspect onto a fixed width x height canvas.
+
+    Single video in, single video out, so it drops straight into a `-vf` chain.
+    `increase` scales the background to cover the canvas (then crops the
+    overflow); `decrease` fits the foreground inside it without distortion.
+    """
+    return (
+        f"split=2[cvbg][cvfg];"
+        f"[cvbg]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},gblur=sigma={sigma}[cvbgb];"
+        f"[cvfg]scale={width}:{height}:force_original_aspect_ratio=decrease[cvfgs];"
+        f"[cvbgb][cvfgs]overlay=(W-w)/2:(H-h)/2"
+    )
+
+
+# Codecs ffprobe reports for single-frame image inputs.
+STILL_IMAGE_CODECS = {"mjpeg", "png", "bmp", "tiff", "webp", "gif", "jpeg2000", "ppm"}
+
+
+def is_still_image(path: Path) -> bool:
+    """True if the source is a single still image rather than a moving clip.
+
+    Stills need `-loop 1` to generate frames for the range's duration. Without
+    it ffmpeg decodes exactly one frame, and the segment ends up with a
+    container duration (borrowed from its audio) but no real video — which then
+    corrupts the concatenated timeline.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(path)],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip().lower()
+        return out in STILL_IMAGE_CODECS
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def has_audio_stream(video: Path) -> bool:
+    """True if the file carries at least one audio stream.
+
+    Montage sources are routinely silent — an exported photo, a muted phone
+    clip. Those must still get an audio stream in their segment, or the `-c copy`
+    concat yields a file whose audio timeline has holes and the music mix has no
+    `[0:a]` to duck under.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a",
+             "-show_entries", "stream=index", "-of", "csv=p=0", str(video)],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        return bool(out)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
 def parse_fps(value: str) -> str:
     """Validate and canonicalize an ffmpeg frame rate."""
     text = value.strip()
@@ -240,11 +314,20 @@ def extract_segment(
     preview: bool = False,
     draft: bool = False,
     rate: str | None = None,
+    canvas: bool = False,
+    mute: bool = False,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
     `-ss` before `-i` for fast accurate seeking. Scale to 1080p from 4K.
     Portrait sources (height > width) are scaled by height to preserve orientation.
+
+    With `canvas=True`, every segment is instead composited onto one fixed
+    landscape canvas via `blurred_fill_chain`, so mixed-orientation sources share
+    dimensions and stay losslessly concat-able.
+
+    With `mute=True`, the segment's natural audio is silenced (but the stream is
+    kept, so the concat stays uniform) — used when a music bed covers the clip.
 
     Quality ladder:
       - final (default): 1080p libx264 fast CRF 20
@@ -253,11 +336,15 @@ def extract_segment(
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    portrait = is_portrait_source(source)
-    if draft:
-        scale = "scale=-2:1280" if portrait else "scale=1280:-2"
+    if canvas:
+        cw, ch = (1280, 720) if draft else (1920, 1080)
+        scale = blurred_fill_chain(cw, ch)
     else:
-        scale = "scale=-2:1920" if portrait else "scale=1920:-2"
+        portrait = is_portrait_source(source)
+        if draft:
+            scale = "scale=-2:1280" if portrait else "scale=1280:-2"
+        else:
+            scale = "scale=-2:1920" if portrait else "scale=1920:-2"
 
     vf_parts: list[str] = []
     if is_hdr_source(source):
@@ -269,7 +356,16 @@ def extract_segment(
 
     # 30ms audio fades at both edges (Rule 3) — prevent pops
     fade_out_start = max(0.0, duration - 0.03)
-    af = f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+    # `apad` + the `-t` below guarantees the audio runs exactly as long as the
+    # video. A source whose audio stream ends before its video (common in arena
+    # and phone exports) otherwise yields a segment with a short audio track,
+    # which leaves a hole in the concatenated timeline and truncates the mix.
+    af = (f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+          f",apad")
+    if mute:
+        # Silence rather than drop: every segment must keep an audio stream or
+        # the `-c copy` concat produces a file with gaps in its audio timeline.
+        af = "volume=0," + af
 
     if draft:
         preset, crf = "ultrafast", "28"
@@ -284,16 +380,34 @@ def extract_segment(
     # own rate; fall back to 24 only if it can't be probed.
     out_rate = rate if rate is not None else (probe_source_fps(source) or "24")
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-ss", f"{seg_start:.3f}",
-        "-i", str(source),
-        "-t", f"{duration:.3f}",
-        "-vf", vf,
-        "-af", af,
+    # A still has no timeline to seek into: loop the single frame instead, and
+    # let -t below set how long it holds.
+    still = is_still_image(source)
+    if still:
+        cmd = ["ffmpeg", "-y", "-loop", "1", "-i", str(source)]
+    else:
+        cmd = ["ffmpeg", "-y", "-ss", f"{seg_start:.3f}", "-i", str(source)]
+
+    # A silent source still needs an audio stream in its segment — synthesize
+    # one, so every segment is uniform for the concat and the music bed has
+    # something to mix against.
+    silent_source = still or not has_audio_stream(source)
+    if silent_source:
+        cmd += ["-f", "lavfi", "-i",
+                "anullsrc=channel_layout=stereo:sample_rate=48000",
+                "-map", "0:v", "-map", "1:a"]
+
+    cmd += ["-t", f"{duration:.3f}", "-vf", vf]
+    if not silent_source:
+        cmd += ["-af", af]
+    cmd += [
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
         "-pix_fmt", "yuv420p", "-r", out_rate,
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        # Force stereo as well as 48kHz. The concat demuxer takes its parameters
+        # from the FIRST segment, so a single mono source (a LiveBarn export, a
+        # one-mic phone clip) silently collapses the whole timeline to mono —
+        # including a stereo music bed mixed on afterwards.
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
         "-movflags", "+faststart",
         str(out_path),
     ]
@@ -316,6 +430,9 @@ def extract_all_segments(
     """
     resolved = resolve_grade_filter(edl.get("grade"))
     is_auto = resolved == "__AUTO__"
+    # Opt-in: EDL `"canvas": "fill"` renders every segment onto one fixed
+    # landscape canvas so mixed-orientation sources can still concat losslessly.
+    canvas = str(edl.get("canvas") or "").lower() in ("fill", "blur", "blurred_fill")
     clips_dir = edit_dir / (
         "clips_draft" if draft else ("clips_preview" if preview else "clips_graded")
     )
@@ -331,15 +448,27 @@ def extract_all_segments(
     # Explicit --fps wins; otherwise preserve the first source's rate.
     if fps is not None:
         out_rate = parse_fps(str(fps))
-    elif ranges:
-        first_src = resolve_path(sources[ranges[0]["source"]], edit_dir)
-        out_rate = probe_source_fps(first_src) or "24"
     else:
-        out_rate = "24"
+        # Resolve the rate from the first MOVING source. Probing a still image
+        # yields a meaningless nominal rate (ffprobe reports 25 for a JPEG),
+        # and a montage that opens on a photo would otherwise force that rate
+        # onto real footage and make the motion judder.
+        out_rate = None
+        for r in ranges:
+            src = resolve_path(sources[r["source"]], edit_dir)
+            if is_still_image(src):
+                continue
+            out_rate = probe_source_fps(src)
+            if out_rate:
+                break
+        out_rate = out_rate or "24"
 
     seg_paths: list[Path] = []
     print(f"extracting {len(ranges)} segment(s) → {clips_dir.name}/  @ {out_rate} fps"
           f"{' (forced)' if fps is not None else ' (from source)'}")
+    if canvas:
+        print(f"  (blurred-fill canvas: {'1280x720' if draft else '1920x1080'} "
+              f"— mixed orientations share one canvas)")
     if is_auto:
         print("  (auto-grade per segment: analyzing each range)")
     for i, r in enumerate(ranges):
@@ -350,16 +479,30 @@ def extract_all_segments(
         duration = end - start
         out_path = clips_dir / f"seg_{i:02d}_{src_name}.mp4"
 
-        if is_auto:
+        # A per-range "grade" overrides the EDL-wide one. Montages cut between
+        # sources with very different exposure — blown-white ice against a dim
+        # room — and a single global grade cannot reconcile them, while the
+        # auto-grade is deliberately bounded to +/-8% and is too gentle to try.
+        if r.get("grade") is not None:
+            seg_resolved = resolve_grade_filter(r["grade"])
+            if seg_resolved == "__AUTO__":
+                seg_filter, _stats = auto_grade_for_clip(
+                    src_path, start=start, duration=duration, verbose=False)
+            else:
+                seg_filter = seg_resolved
+        elif is_auto:
             seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
         else:
             seg_filter = resolved
 
+        mute = bool(r.get("mute"))
         note = r.get("beat") or r.get("note") or ""
-        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
+        flag = "  [muted]" if mute else ""
+        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{flag}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate)
+        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate,
+                        canvas=canvas, mute=mute)
         seg_paths.append(out_path)
 
     return seg_paths
@@ -385,6 +528,105 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     print(f"concat → {out_path.name}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     concat_list.unlink(missing_ok=True)
+
+
+# -------- Music bed ----------------------------------------------------------
+#
+# For montages the music is the spine and the natural audio is texture under it.
+# Mixed AFTER the lossless concat and BEFORE loudnorm, with `-c:v copy` so the
+# video is never re-encoded for the sake of audio (Rule 2's no-double-encode
+# principle applied to the audio side).
+
+MUSIC_GAIN = 0.85           # music bed, primary
+MUSIC_NATURAL_GAIN = 0.5    # natural/crowd audio, ducked under it
+MUSIC_FADE_OUT = 3.0        # seconds of fade at the tail
+
+
+def probe_duration(path: Path) -> float | None:
+    """Container duration in seconds, or None if it can't be probed."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(path)],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        return float(out)
+    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+        return None
+
+
+def mix_music_bed(
+    video_path: Path,
+    music_cfg: dict,
+    out_path: Path,
+    edit_dir: Path,
+) -> bool:
+    """Mix a music bed under the video's existing audio. Video is stream-copied.
+
+    Returns True if an output was written, False if the bed was skipped.
+
+    EDL shape:
+        "music": {
+            "source": "bed.mp3",   # relative to the EDL, or absolute
+            "gain": 0.85,          # music level
+            "natural_gain": 0.5,   # existing audio ducked under the music
+            "fade_out": 3.0        # tail fade, seconds
+        }
+
+    The bed is looped if it is shorter than the video and cut to video length if
+    longer (`duration=first`). `normalize=0` on amix is essential — without it
+    amix rescales every input by 1/n and the explicit gains above stop meaning
+    anything.
+    """
+    src = resolve_path(str(music_cfg["source"]), edit_dir)
+    if not src.exists():
+        print(f"warning: music source does not exist, skipping bed: {src}")
+        return False
+
+    gain = float(music_cfg.get("gain", MUSIC_GAIN))
+    natural = float(music_cfg.get("natural_gain", MUSIC_NATURAL_GAIN))
+    fade = float(music_cfg.get("fade_out", MUSIC_FADE_OUT))
+
+    duration = probe_duration(video_path)
+    music_chain = f"volume={gain}"
+    if duration and fade > 0:
+        fade_start = max(0.0, duration - fade)
+        music_chain += f",afade=t=out:st={fade_start:.3f}:d={fade:.3f}"
+
+    # A base with no audio at all (every source silent) has no [0:a] to mix —
+    # use the bed alone rather than failing the render. That path needs
+    # `-shortest` on every path: the bed is looped indefinitely, so it is
+    # `-shortest` (not amix) that stops the output at the video's length.
+    # `duration=longest` means a base whose audio ends early still gets scored
+    # all the way to the end of the picture.
+    base_has_audio = has_audio_stream(video_path)
+    if base_has_audio:
+        filt = (
+            f"[0:a]volume={natural}[nat];"
+            f"[1:a]{music_chain}[bed];"
+            f"[nat][bed]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
+        )
+        natural_note = f"natural {natural}"
+    else:
+        filt = f"[1:a]{music_chain}[aout]"
+        natural_note = "no natural audio"
+
+    print(f"music bed → {src.name}  (music {gain}, {natural_note}, "
+          f"{fade:.1f}s tail fade)")
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-stream_loop", "-1", "-i", str(src),
+        "-filter_complex", filt,
+        "-map", "0:v", "-map", "[aout]",
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-movflags", "+faststart",
+    ]
+    cmd.append("-shortest")
+    cmd.append(str(out_path))
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    return True
 
 
 # -------- Master SRT (Rule 5) ------------------------------------------------
@@ -701,6 +943,11 @@ def main() -> None:
         help="Skip subtitles even if the EDL references one",
     )
     ap.add_argument(
+        "--no-music",
+        action="store_true",
+        help="Skip the music bed even if the EDL defines one",
+    )
+    ap.add_argument(
         "--no-loudnorm",
         action="store_true",
         help="Skip audio loudness normalization. Default is on (-14 LUFS, -1 dBTP, LRA 11).",
@@ -737,6 +984,18 @@ def main() -> None:
         base_name = "base.mp4"
     base_path = edit_dir / base_name
     concat_segments(segment_paths, base_path, edit_dir)
+
+    # 2b. Music bed (montages): mix under the concatenated natural audio.
+    # Video is stream-copied here, so this costs no extra video encode.
+    music_cfg = edl.get("music")
+    if music_cfg and not args.no_music:
+        mixed_path = base_path.with_name(base_path.stem + "_music.mp4")
+        # Clear any output from a previous render first: if the bed is missing
+        # this time, mix_music_bed writes nothing, and a leftover file would
+        # otherwise be picked up and scored into this render silently.
+        mixed_path.unlink(missing_ok=True)
+        if mix_music_bed(base_path, music_cfg, mixed_path, edit_dir):
+            base_path = mixed_path
 
     # 3. Subtitles: build if requested, resolve final path
     subs_path: Path | None = None
