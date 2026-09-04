@@ -20,6 +20,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+try:
+    from _util import configure_stdout
+except ModuleNotFoundError:
+    from helpers._util import configure_stdout
 from transcribe import load_api_key, transcribe_one, transcript_path
 
 
@@ -35,6 +39,7 @@ def find_videos(videos_dir: Path) -> list[Path]:
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Parallel batch transcription of a videos directory")
     ap.add_argument("videos_dir", type=Path, help="Directory containing source videos")
     ap.add_argument(

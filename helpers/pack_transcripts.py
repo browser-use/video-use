@@ -20,6 +20,11 @@ import json
 import sys
 from pathlib import Path
 
+try:
+    from _util import configure_stdout
+except ModuleNotFoundError:
+    from helpers._util import configure_stdout
+
 
 def format_time(seconds: float) -> str:
     """Format a time in seconds as "NNN.NN" with fixed 6-char width for alignment."""
@@ -163,6 +168,7 @@ def render_markdown(entries: list[tuple[str, float, list[dict]]], silence_thresh
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Pack Scribe transcripts into takes_packed.md")
     ap.add_argument("--edit-dir", type=Path, required=True, help="Edit directory containing transcripts/")
     ap.add_argument(

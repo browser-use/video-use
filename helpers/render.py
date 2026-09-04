@@ -30,6 +30,12 @@ from fractions import Fraction
 from pathlib import Path
 
 try:
+    from _util import configure_stdout
+except ModuleNotFoundError:
+    from helpers._util import configure_stdout
+
+
+try:
     from grade import get_preset, auto_grade_for_clip  # same directory
 except Exception:
     def get_preset(name: str) -> str:
@@ -677,6 +683,7 @@ def build_final_composite(
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Render a video from an EDL")
     ap.add_argument("edl", type=Path, help="Path to edl.json")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output video path")
