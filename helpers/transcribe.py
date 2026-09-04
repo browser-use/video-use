@@ -231,6 +231,7 @@ def _call_bw_stt(audio: Path, api_key: str) -> dict:
         sender = threading.Thread(target=_send_audio, daemon=True)
         sender.start()
 
+        session_closed = False
         for raw in ws:
             msg = json.loads(raw)
             if msg["type"] == "Segment":
@@ -245,6 +246,7 @@ def _call_bw_stt(audio: Path, api_key: str) -> dict:
                     })
             elif msg["type"] == "SessionClosed":
                 audio_duration = msg.get("audio_duration_seconds", 0.0)
+                session_closed = True
                 break
             elif msg["type"] == "Error":
                 raise RuntimeError(f"BW STT error {msg['code']}: {msg['message']}")
@@ -252,6 +254,13 @@ def _call_bw_stt(audio: Path, api_key: str) -> dict:
         sender.join(timeout=10)
         if send_error:
             raise RuntimeError(f"BW STT send failed: {send_error[0]}") from send_error[0]
+        if not session_closed:
+            # A clean socket close ends the iterator without raising; returning
+            # here would cache a truncated transcript as final output.
+            raise RuntimeError(
+                f"BW STT session ended without SessionClosed — transcript incomplete "
+                f"({len(all_words)} words received). Not caching; retry the transcription."
+            )
 
     return {
         "words": all_words,
