@@ -295,8 +295,9 @@ def cached_provider(path: Path) -> str:
 
     Files written before the provider field existed came from ElevenLabs
     (the only backend at the time), so a missing field means "elevenlabs".
-    An unreadable or corrupt file returns "" so it never matches a provider
-    and gets re-transcribed.
+    An unreadable or corrupt file — including a provider value that is not a
+    known provider name — returns "" so it never matches a provider and gets
+    re-transcribed.
     """
     try:
         payload = json.loads(path.read_text())
@@ -304,7 +305,8 @@ def cached_provider(path: Path) -> str:
         return ""
     if not isinstance(payload, dict):
         return ""
-    return payload.get("provider", "elevenlabs")
+    prov = payload.get("provider", "elevenlabs")
+    return prov if prov in PROVIDERS else ""
 
 
 def transcribe_one(
