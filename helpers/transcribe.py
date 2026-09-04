@@ -90,12 +90,11 @@ def detect_provider() -> str:
     )
 
 
-def resolve_provider(provider: str | None = None) -> str:
-    """Resolve the provider using the three-tier priority order.
+def explicit_provider(provider: str | None = None) -> str | None:
+    """Provider explicitly requested via CLI flag or TRANSCRIBE_PROVIDER, or None.
 
-    1. *provider* argument (from --provider CLI flag)
-    2. TRANSCRIBE_PROVIDER in .env or environment
-    3. Auto-detection from available API keys
+    Unlike resolve_provider(), never falls back to key auto-detection, so it
+    can be answered without any API key configured.
     """
     if provider is not None:
         if provider not in PROVIDERS:
@@ -109,7 +108,17 @@ def resolve_provider(provider: str | None = None) -> str:
                 f"Choose from: {', '.join(PROVIDERS)}"
             )
         return env_prov
-    return detect_provider()
+    return None
+
+
+def resolve_provider(provider: str | None = None) -> str:
+    """Resolve the provider using the three-tier priority order.
+
+    1. *provider* argument (from --provider CLI flag)
+    2. TRANSCRIBE_PROVIDER in .env or environment
+    3. Auto-detection from available API keys
+    """
+    return explicit_provider(provider) or detect_provider()
 
 
 def count_audio_tracks(video_path: Path) -> int:

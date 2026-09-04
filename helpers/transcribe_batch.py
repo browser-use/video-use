@@ -26,6 +26,7 @@ from pathlib import Path
 from transcribe import (
     PROVIDERS,
     cached_provider,
+    explicit_provider,
     load_api_key,
     resolve_provider,
     transcribe_one,
@@ -91,14 +92,18 @@ def main() -> None:
     if not videos:
         sys.exit(f"no videos found in {videos_dir}")
 
-    # Resolved before the cache check: a transcript only counts as cached
-    # when it was produced by the same provider.
-    provider = resolve_provider(args.provider)
-    print(f"provider: {provider}")
+    # An explicitly requested provider (flag or TRANSCRIBE_PROVIDER) means a
+    # transcript only counts as cached when that provider produced it. Without
+    # one, any readable transcript counts, and key auto-detection waits until
+    # there is work to do — an all-cached rerun must not require an API key.
+    provider = explicit_provider(args.provider)
 
     def _is_cached(v: Path) -> bool:
         p = transcript_path(edit_dir, v, args.audio_track)
-        return p.exists() and cached_provider(p) == provider
+        if not p.exists():
+            return False
+        src = cached_provider(p)
+        return src == provider if provider else src != ""
 
     already_cached = [v for v in videos if _is_cached(v)]
     pending = [v for v in videos if v not in already_cached]
@@ -108,6 +113,9 @@ def main() -> None:
         print("nothing to do")
         return
 
+    if provider is None:
+        provider = resolve_provider()  # auto-detect; needs an API key
+    print(f"provider: {provider}")
     api_key = load_api_key(provider)
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()
