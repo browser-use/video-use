@@ -95,9 +95,14 @@ class AutoGradeDifferentiatesStillsTests(unittest.TestCase):
         """Drive auto_grade_for_clip with a synthetic signalstats reading."""
         def fake_run(cmd, *a, **kw):
             # Locate the metadata target the filtergraph was told to write.
+            # The target may be a bare filename resolved against a cwd, or a
+            # full path — accept either so this test is not coupled to which.
             vf = cmd[cmd.index("-vf") + 1]
             name = vf.rsplit("file=", 1)[1]
-            Path(kw["cwd"], name).write_text(
+            target = Path(name)
+            if not target.is_absolute():
+                target = Path(kw.get("cwd") or ".", name)
+            target.write_text(
                 f"lavfi.signalstats.YBITDEPTH=8\n"
                 f"lavfi.signalstats.YAVG={y_avg}\n"
                 f"lavfi.signalstats.YMIN=16\n"
