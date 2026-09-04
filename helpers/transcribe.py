@@ -291,7 +291,7 @@ def cached_provider(path: Path) -> str:
     """
     try:
         payload = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return ""
     if not isinstance(payload, dict):
         return ""
