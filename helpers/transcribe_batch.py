@@ -1,7 +1,9 @@
-"""Batch-transcribe every video in a directory with 4 parallel workers.
+"""Batch-transcribe every video in a directory with parallel workers.
 
-Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
-each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
+Walks <videos_dir> for common video extensions, transcribes each via the
+configured provider (ElevenLabs Scribe by default, or BW Labs STT via
+--provider / TRANSCRIBE_PROVIDER), writes transcripts to
+<videos_dir>/edit/transcripts/<name>.json.
 
 Cached per-file: any source that already has a transcript is skipped.
 
@@ -10,6 +12,7 @@ Usage:
     python helpers/transcribe_batch.py <videos_dir> --workers 4
     python helpers/transcribe_batch.py <videos_dir> --num-speakers 2
     python helpers/transcribe_batch.py <videos_dir> --edit-dir /custom/edit
+    python helpers/transcribe_batch.py <videos_dir> --provider bw_stt
 """
 
 from __future__ import annotations
@@ -20,7 +23,15 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one, transcript_path
+from transcribe import (
+    PROVIDERS,
+    cached_provider,
+    explicit_provider,
+    load_api_key,
+    resolve_provider,
+    transcribe_one,
+    transcript_path,
+)
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -62,6 +73,12 @@ def main() -> None:
         default=0,
         help="Zero-based audio track to transcribe (OBS: 0 = game, 1 = mic).",
     )
+    ap.add_argument(
+        "--provider",
+        choices=PROVIDERS,
+        default=None,
+        help="Transcription backend (default: auto-detect from available API keys).",
+    )
     args = ap.parse_args()
 
     videos_dir = args.videos_dir.resolve()
@@ -75,8 +92,20 @@ def main() -> None:
     if not videos:
         sys.exit(f"no videos found in {videos_dir}")
 
-    already_cached = [v for v in videos
-                      if transcript_path(edit_dir, v, args.audio_track).exists()]
+    # An explicitly requested provider (flag or TRANSCRIBE_PROVIDER) means a
+    # transcript only counts as cached when that provider produced it. Without
+    # one, any readable transcript counts, and key auto-detection waits until
+    # there is work to do — an all-cached rerun must not require an API key.
+    provider = explicit_provider(args.provider)
+
+    def _is_cached(v: Path) -> bool:
+        p = transcript_path(edit_dir, v, args.audio_track)
+        if not p.exists():
+            return False
+        src = cached_provider(p)
+        return src == provider if provider else src != ""
+
+    already_cached = [v for v in videos if _is_cached(v)]
     pending = [v for v in videos if v not in already_cached]
 
     print(f"found {len(videos)} videos ({len(already_cached)} cached, {len(pending)} to transcribe)")
@@ -84,8 +113,10 @@ def main() -> None:
         print("nothing to do")
         return
 
-    api_key = load_api_key()
-
+    if provider is None:
+        provider = resolve_provider()  # auto-detect; needs an API key
+    print(f"provider: {provider}")
+    api_key = load_api_key(provider)
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()
 
@@ -101,6 +132,7 @@ def main() -> None:
                 num_speakers=args.num_speakers,
                 verbose=False,
                 audio_track=args.audio_track,
+                provider=provider,
             ): v
             for v in pending
         }
