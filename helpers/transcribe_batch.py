@@ -23,7 +23,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import PROVIDERS, load_api_key, resolve_provider, transcribe_one, transcript_path
+from transcribe import (
+    PROVIDERS,
+    cached_provider,
+    load_api_key,
+    resolve_provider,
+    transcribe_one,
+    transcript_path,
+)
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -84,8 +91,16 @@ def main() -> None:
     if not videos:
         sys.exit(f"no videos found in {videos_dir}")
 
-    already_cached = [v for v in videos
-                      if transcript_path(edit_dir, v, args.audio_track).exists()]
+    # Resolved before the cache check: a transcript only counts as cached
+    # when it was produced by the same provider.
+    provider = resolve_provider(args.provider)
+    print(f"provider: {provider}")
+
+    def _is_cached(v: Path) -> bool:
+        p = transcript_path(edit_dir, v, args.audio_track)
+        return p.exists() and cached_provider(p) == provider
+
+    already_cached = [v for v in videos if _is_cached(v)]
     pending = [v for v in videos if v not in already_cached]
 
     print(f"found {len(videos)} videos ({len(already_cached)} cached, {len(pending)} to transcribe)")
@@ -93,9 +108,7 @@ def main() -> None:
         print("nothing to do")
         return
 
-    provider = resolve_provider(args.provider)
     api_key = load_api_key(provider)
-    print(f"provider: {provider}")
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")
     t0 = time.time()
 

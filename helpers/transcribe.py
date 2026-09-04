@@ -281,6 +281,23 @@ def transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
     return edit_dir / "transcripts" / f"{video.stem}{suffix}.json"
 
 
+def cached_provider(path: Path) -> str:
+    """Which provider produced the transcript at *path*.
+
+    Files written before the provider field existed came from ElevenLabs
+    (the only backend at the time), so a missing field means "elevenlabs".
+    An unreadable or corrupt file returns "" so it never matches a provider
+    and gets re-transcribed.
+    """
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    return payload.get("provider", "elevenlabs")
+
+
 def transcribe_one(
     video: Path,
     edit_dir: Path,
@@ -293,16 +310,24 @@ def transcribe_one(
 ) -> Path:
     """Transcribe a single video. Returns path to transcript JSON.
 
-    Cached: returns existing path immediately if the transcript already exists.
+    Cached: returns existing path immediately if a transcript from the same
+    provider already exists. A cached file from a different provider is
+    re-transcribed and overwritten.
     """
     transcripts_dir = edit_dir / "transcripts"
     transcripts_dir.mkdir(parents=True, exist_ok=True)
     out_path = transcript_path(edit_dir, video, audio_track)
 
     if out_path.exists():
+        prev = cached_provider(out_path)
+        if prev == provider:
+            if verbose:
+                print(f"cached: {out_path.name}")
+            return out_path
         if verbose:
-            print(f"cached: {out_path.name}")
-        return out_path
+            print(f"  cached {out_path.name} is from "
+                  f"{prev or 'an unreadable file'}; re-transcribing with {provider}",
+                  flush=True)
 
     if verbose:
         print(f"  extracting audio from {video.name}", flush=True)
@@ -347,6 +372,9 @@ def transcribe_one(
                 print(f"  streaming {video.stem}.wav ({size_mb:.1f} MB) to BW Labs STT",
                       flush=True)
             payload = _call_bw_stt(audio, api_key)
+
+    if isinstance(payload, dict):
+        payload["provider"] = provider  # cache identity — see cached_provider()
 
     out_path.write_text(json.dumps(payload, indent=2))
     dt = time.time() - t0
