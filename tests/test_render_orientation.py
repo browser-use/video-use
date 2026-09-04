@@ -44,6 +44,14 @@ class PortraitDetectionTests(unittest.TestCase):
         stream = {"width": 1920, "height": 1080, "tags": {"rotate": "270"}}
         self.assertFalse(self._is_portrait(stream))
 
+    def test_half_turn_rotation_does_not_change_orientation(self):
+        stream = {
+            "width": 1920,
+            "height": 1080,
+            "side_data_list": [{"rotation": 180}],
+        }
+        self.assertFalse(self._is_portrait(stream))
+
     def test_rotation_can_turn_coded_portrait_into_landscape(self):
         stream = {
             "width": 1080,
