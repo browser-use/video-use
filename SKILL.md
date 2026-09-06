@@ -1,6 +1,6 @@
 ---
 name: video-use
-description: Edit any video by conversation. Transcribe, cut, color grade, generate overlay animations, burn subtitles — for talking heads, montages, tutorials, travel, interviews. No presets, no menus. Ask questions, confirm the plan, execute, iterate, persist. Production-correctness rules are hard; everything else is artistic freedom.
+description: "Edit source videos through transcript-guided cuts, grading, subtitles, and overlays when the user requests video editing."
 ---
 
 # Video Use
@@ -9,8 +9,8 @@ description: Edit any video by conversation. Transcribe, cut, color grade, gener
 
 1. **LLM reasons from raw transcript + on-demand visuals.** The only derived artifact that earns its keep is a packed phrase-level transcript (`takes_packed.md`). Everything else — filler tagging, retake detection, shot classification, emphasis scoring — you derive at decision time.
 2. **Audio is primary, visuals follow.** Cut candidates come from speech boundaries and silence gaps. Drill into visuals only at decision points.
-3. **Ask → confirm → execute → iterate → persist.** Never touch the cut until the user has confirmed the strategy in plain English.
-4. **Generalize.** Do not assume what kind of video this is. Look at the material, ask the user, then edit.
+3. **Execute the authorized edit through verified output.** Reuse the user’s stated strategy. Ask only when a material creative choice, paid operation, or destructive change is outside the request; reversible edits with clear intent do not require another plan approval.
+4. **Generalize.** Inspect the material and use the supplied brief. Ask only for missing choices that materially affect the edit.
 5. **Artistic freedom is the default.** Every specific value, preset, font, color, duration, pitch structure, and technique in this document is a *worked example* from one proven video — not a mandate. Read them to understand what's possible and why each worked. Then make your own taste calls based on what the material actually is and what the user actually wants. **The only things you MUST do are in the Hard Rules section below.** Everything else is yours.
 6. **Invent freely.** If the material calls for a technique not described here — split-screen, picture-in-picture, lower-third identity cards, reaction cuts, speed ramps, freeze frames, crossfades, match cuts, L-cuts, J-cuts, speed ramps over breath, whatever — build it. The helpers are ffmpeg and PIL. They can do anything the format supports. Do not wait for permission.
 7. **Verify your own output before showing it to the user.** If you wouldn't ship it, don't present it.
@@ -29,7 +29,7 @@ These are the things where deviation produces silent failures or broken output. 
 8. **Word-level verbatim ASR only.** Never SRT/phrase mode (loses sub-second gap data). Never normalized fillers (loses editorial signal).
 9. **Cache transcripts per source.** Never re-transcribe unless the source file itself changed.
 10. **Parallel sub-agents for multiple animations.** Never sequential. Spawn N at once via the `Agent` tool; total wall time ≈ slowest one.
-11. **Strategy confirmation before execution.** Never touch the cut until the user has approved the plain-English plan.
+11. **Respect scope.** Keep source footage untouched. Get confirmation for material ambiguity or actions outside existing authority; do not repeat approval for the same requested edit.
 12. **All session outputs in `<videos_dir>/edit/`.** Never write inside the `video-use/` project directory.
 
 Everything else in this document is a worked example. Deviate whenever the material calls for it.
@@ -84,8 +84,8 @@ For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a su
 
 1. **Inventory.** `ffprobe` every source. `transcribe_batch.py` on the directory. `pack_transcripts.py` to produce `takes_packed.md`. Sample one or two `timeline_view`s for a visual first impression.
 2. **Pre-scan for problems.** One pass over `takes_packed.md` to note verbal slips, obvious mis-speaks, or phrasings to avoid. Plain list, feed into the editor brief.
-3. **Converse.** Describe what you see in plain English. Ask questions *shaped by the material*. Collect: content type, target length/aspect, aesthetic/brand direction, pacing feel, must-preserve moments, must-cut moments, animation and grade preferences, subtitle needs. Do not use a fixed checklist — the right questions are different every time.
-4. **Propose strategy.** 4–8 sentences: shape, take choices, cut direction, animation plan, grade direction, subtitle style, length estimate. **Wait for confirmation.**
+3. **Resolve intent.** Use the material, existing project, and user brief to determine target length/aspect, style, pacing, preserved moments, and requested effects. Ask only when a missing choice materially changes the result.
+4. **State the strategy when useful.** Proceed with the requested or already approved direction. Seek confirmation only for unresolved material choices or scope changes; do not impose a fixed planning round on a narrow edit.
 5. **Execute.** Produce `edl.json` via the editor sub-agent brief. Drill into `timeline_view` at ambiguous moments. Build animations in parallel sub-agents. Apply grade per-segment. Compose via `render.py`.
 6. **Preview.** `render.py --preview`.
 7. **Self-eval (before showing the user).** Run `timeline_view` on the **rendered output** (not the sources) at every cut boundary (±1.5s window). Check each image for:
@@ -97,7 +97,7 @@ For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a su
    Also sample: first 2s, last 2s, and 2–3 mid-points — check grade consistency, subtitle readability, overall coherence. Run `ffprobe` on the output to verify duration matches the EDL expectation.
 
    If anything fails: fix → re-render → re-eval. **Cap at 3 self-eval passes** — if issues remain after 3, flag them to the user rather than looping forever. Only present the preview once the self-eval passes.
-8. **Iterate + persist.** Natural-language feedback, re-plan, re-render. Never re-transcribe. Final render on confirmation. Append to `project.md`.
+8. **Iterate + persist.** Natural-language feedback, re-plan, re-render. Never re-transcribe. Produce the final render when requested or already authorized; a preview-only request ends with the verified preview. Append to `project.md`.
 
 ## Cut craft (techniques)
 
@@ -196,7 +196,7 @@ Invent a third style if neither fits. Hard rules: subtitles LAST (Rule 1), outpu
 
 ## Animations (when requested)
 
-Animations match the content and the brand. **Get the palette, font, and visual language from the conversation** — never assume a default. If the user hasn't told you, propose a palette in the strategy phase and wait for confirmation before building anything.
+Match the content, existing assets, and supplied brand direction. If no style is specified, choose a coherent reversible treatment and state the assumption. Ask only when a brand requirement or material creative ambiguity prevents a sound choice.
 
 **Tool options:**
 
@@ -244,7 +244,7 @@ def ease_in_out_cubic(t):
 - ≤ 2 accent colors, ~40% empty space, minimal chrome
 - Result: terminal / retro tech feel
 
-This is one style. If the brand is warm and serif, use that. If it's colorful and playful, use that. If the user handed you a style guide, follow it. If they didn't, propose one and confirm.
+This is one style. If the brand is warm and serif, use that. If it's colorful and playful, use that. If the user handed you a style guide, follow it. If they did not, choose a coherent treatment within the requested edit.
 
 **Parallel sub-agent brief** — each animation is one sub-agent spawned via the `Agent` tool. Each prompt is self-contained (sub-agents have no parent context). Include:
 
@@ -301,7 +301,7 @@ Append one section per session at `<edit>/project.md`:
 **Outstanding:** deferred items
 ```
 
-On startup, read `project.md` if it exists and summarize the last session in one sentence before asking whether to continue.
+On continuation, read `project.md` if it exists and resume the requested work from its verified state. Do not ask whether to continue when the user already requested continuation.
 
 ## Anti-patterns
 
@@ -317,6 +317,6 @@ Things that consistently fail regardless of style:
 - **Hard audio cuts at segment boundaries.** Audible pops. (Hard Rule 3.)
 - **Typing text centered on the partial string.** Text slides left as it grows.
 - **Sequential sub-agents for multiple animations.** Always parallel.
-- **Editing before confirming the strategy.** Never.
+- **Changing strategy outside the user’s requested or approved scope.** Resolve material ambiguity first; do not ask again for the same authorized edit.
 - **Re-transcribing cached sources.** Immutable outputs of immutable inputs.
 - **Assuming what kind of video it is.** Look first, ask second, edit last.
