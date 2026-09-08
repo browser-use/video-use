@@ -194,6 +194,25 @@ Alignment=2,MarginV=35
 
 Invent a third style if neither fits. Hard rules: subtitles LAST (Rule 1), output-timeline offsets (Rule 5).
 
+### Driving it from the EDL
+
+`render.py --build-subtitles` reads an optional `subtitle_style` block, so a style is data rather than a code edit:
+
+```json
+"subtitle_style": {
+  "words_per_chunk": 6,
+  "case": "sentence",
+  "force_style": "FontName=Helvetica,FontSize=13,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=28"
+}
+```
+
+Defaults reproduce the shipped `bold-overlay` look exactly: `words_per_chunk` 2, `case` `"upper"`, and `SUB_FORCE_STYLE`.
+
+Two things worth knowing when you deviate:
+
+- `"case": "sentence"` keeps the ASR's own capitalization, but a cut can promote a mid-sentence word to the start of a sentence. The builder capitalizes any cue that opens the file or follows sentence-final punctuation, so that case is handled.
+- `force_style`'s `MarginV` is relative to `PlayResY=288`. The default of 90 is tuned for **vertical** video; for 16:9 landscape a value around 28 sits the caption roughly 10% up from the bottom.
+
 ## Animations (when requested)
 
 Animations match the content and the brand. **Get the palette, font, and visual language from the conversation** — never assume a default. If the user hasn't told you, propose a palette in the strategy phase and wait for confirmation before building anything.

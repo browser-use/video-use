@@ -392,6 +392,10 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
 
 PUNCT_BREAK = set(".,!?;:")
 
+# Recognized values for subtitle_style.case. "upper" is the default and matches
+# the shipped bold-overlay look; "sentence" keeps the ASR's own capitalization.
+SUBTITLE_CASE_MODES = frozenset({"upper", "sentence"})
+
 
 def _srt_timestamp(seconds: float) -> str:
     total_ms = int(round(seconds * 1000))
@@ -419,10 +423,62 @@ def _words_in_range(transcript: dict, t_start: float, t_end: float) -> list[dict
 def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
     """Build an output-timeline SRT from per-source transcripts.
 
-    - 2-word chunks (break on any punctuation in between)
-    - UPPERCASE text
-    - Output times computed as word.start - segment_start + segment_offset
+    Chunking and case come from the optional `subtitle_style` block on the EDL:
+
+    - `words_per_chunk` (default 2) - words per caption line, still breaking
+      early on any punctuation in between.
+    - `break_on` (default ".,!?;:") - which punctuation forces an early break.
+      Narrow it to ".!?" so a mid-sentence comma stops splitting a phrase.
+    - `balance` (default False) - split each run between breaks into equal-length
+      cues instead of greedily filling to the cap, so a sentence's remainder is
+      not stranded alone on the last line.
+    - `min_words` (default 1) - fold a cue shorter than this into the one before
+      it.
+    - `case` (default "upper") - "upper" shouts every line, which suits a
+      fast-cut social edit. "sentence" leaves the ASR's own capitalization
+      alone, which is what a narrative or documentary read wants.
+    - `force_style` - an ASS override string, read in main().
+
+    Output times are computed as word.start - segment_start + segment_offset.
     """
+    style = edl.get("subtitle_style") or {}
+
+    raw_chunk = style.get("words_per_chunk", 2)
+    try:
+        words_per_chunk = int(raw_chunk)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"subtitle_style.words_per_chunk must be an integer, got {raw_chunk!r}"
+        ) from None
+    if words_per_chunk < 1:
+        raise ValueError(
+            f"subtitle_style.words_per_chunk must be >= 1, got {words_per_chunk}"
+        )
+
+    break_on = set(str(style.get("break_on", "".join(sorted(PUNCT_BREAK)))))
+    balance = bool(style.get("balance", False))
+
+    raw_min = style.get("min_words", 1)
+    try:
+        min_words = int(raw_min)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"subtitle_style.min_words must be an integer, got {raw_min!r}"
+        ) from None
+    if min_words < 1:
+        raise ValueError(
+            f"subtitle_style.min_words must be >= 1, got {min_words}"
+        )
+
+    # Validate before generating anything. An unrecognized value used to fall
+    # through applying neither transformation, which silently emitted the raw
+    # ASR capitalization -- not the documented "upper" default, and not an error.
+    case_mode = str(style.get("case", "upper")).lower()
+    if case_mode not in SUBTITLE_CASE_MODES:
+        raise ValueError(
+            f"subtitle_style.case must be one of "
+            f"{', '.join(sorted(SUBTITLE_CASE_MODES))}; got {case_mode!r}"
+        )
     transcripts_dir = edit_dir / "transcripts"
     sources = edl["sources"]
 
@@ -444,21 +500,46 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
         transcript = json.loads(tr_path.read_text())
         words_in_seg = _words_in_range(transcript, seg_start, seg_end)
 
-        # Group into 2-word chunks, break on punctuation
-        chunks: list[list[dict]] = []
+        # Split into runs at punctuation first, then divide each run into cues.
+        runs: list[list[dict]] = []
         current: list[dict] = []
         for w in words_in_seg:
             text = (w.get("text") or "").strip()
             if not text:
                 continue
             current.append(w)
-            # Break if the current text ends in punctuation or we hit 2 words
-            ends_in_punct = bool(text) and text[-1] in PUNCT_BREAK
-            if len(current) >= 2 or ends_in_punct:
-                chunks.append(current)
+            if text[-1] in break_on:
+                runs.append(current)
                 current = []
         if current:
-            chunks.append(current)
+            runs.append(current)
+
+        chunks: list[list[dict]] = []
+        for run in runs:
+            if balance:
+                # Greedy filling packs each cue to the cap and strands the run's
+                # remainder on the last line ("...becoming right" / "now."). Use
+                # the same number of cues, sized evenly.
+                k = max(1, -(-len(run) // words_per_chunk))
+                base, extra = divmod(len(run), k)
+                i = 0
+                for j in range(k):
+                    n = base + (1 if j < extra else 0)
+                    chunks.append(run[i:i + n])
+                    i += n
+            else:
+                for i in range(0, len(run), words_per_chunk):
+                    chunks.append(run[i:i + words_per_chunk])
+
+        # A run shorter than min_words still yields a stranded cue.
+        if min_words > 1:
+            merged: list[list[dict]] = []
+            for chunk in chunks:
+                if merged and len(chunk) < min_words:
+                    merged[-1].extend(chunk)
+                else:
+                    merged.append(chunk)
+            chunks = merged
 
         for chunk in chunks:
             local_start = max(seg_start, chunk[0].get("start", seg_start))
@@ -471,13 +552,29 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             text = re.sub(r"\s+", " ", text).strip()
             # Strip trailing punctuation for cleaner uppercase look
             text = text.rstrip(",;:")
-            text = text.upper()
+            if case_mode == "upper":
+                text = text.upper()
             entries.append((out_start, out_end, text))
 
         seg_offset += seg_duration
 
     # Sort and write as SRT
     entries.sort(key=lambda e: e[0])
+
+    # In sentence case the ASR's capitalization is right for a continuation
+    # line but wrong when a cut promotes a mid-sentence word to the start of a
+    # sentence. Capitalize a cue that opens the file or follows one ending in
+    # sentence-final punctuation.
+    if case_mode == "sentence":
+        recased: list[tuple[float, float, str]] = []
+        prev_text = ""
+        for a, b, t in entries:
+            if t and (not prev_text or prev_text.rstrip()[-1:] in ".!?"):
+                t = t[0].upper() + t[1:]
+            recased.append((a, b, t))
+            prev_text = t
+        entries = recased
+
     lines: list[str] = []
     for i, (a, b, t) in enumerate(entries, start=1):
         lines.append(str(i))
@@ -603,6 +700,7 @@ def build_final_composite(
     subtitles_path: Path | None,
     out_path: Path,
     edit_dir: Path,
+    force_style: str = SUB_FORCE_STYLE,
 ) -> None:
     """Final pass: base → overlays (PTS-shifted) → subtitles LAST → out.
 
@@ -643,7 +741,7 @@ def build_final_composite(
     if has_subs:
         subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
         filter_parts.append(
-            f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
+            f"{current}subtitles='{subs_abs}':force_style='{force_style}'[outv]"
         )
         out_label = "[outv]"
     else:
@@ -752,13 +850,16 @@ def main() -> None:
 
     # 4. Composite (overlays + subtitles LAST) → intermediate (pre-loudnorm) path
     overlays = edl.get("overlays") or []
+    sub_force_style = (edl.get("subtitle_style") or {}).get("force_style") or SUB_FORCE_STYLE
     if args.no_loudnorm:
         # Composite directly to final output
-        build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
+        build_final_composite(base_path, overlays, subs_path, out_path, edit_dir,
+                              force_style=sub_force_style)
     else:
         # Composite to a temp file, then run loudnorm → final output
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
-        build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
+        build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir,
+                              force_style=sub_force_style)
         print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
         apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft)
         tmp_composite.unlink(missing_ok=True)
