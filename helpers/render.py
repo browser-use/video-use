@@ -85,6 +85,16 @@ def resolve_grade_filter(grade_field: str | None) -> str:
     return grade_field
 
 
+def probe_duration(path: Path) -> float:
+    """Container duration of a rendered file, in seconds."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+        capture_output=True, text=True, check=True,
+    )
+    return float(out.stdout.strip())
+
+
 def resolve_path(maybe_path: str, base: Path) -> Path:
     """Resolve a path that may be absolute or relative to `base`."""
     p = Path(maybe_path)
@@ -416,24 +426,49 @@ def _words_in_range(transcript: dict, t_start: float, t_end: float) -> list[dict
     return out
 
 
-def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
+def build_master_srt(edl: dict, edit_dir: Path, out_path: Path,
+                     segment_paths: list[Path] | None = None) -> None:
     """Build an output-timeline SRT from per-source transcripts.
 
     - 2-word chunks (break on any punctuation in between)
     - UPPERCASE text
     - Output times computed as word.start - segment_start + segment_offset
+
+    `segment_paths`, when given, are the extracted clips in concat order. Their
+    measured durations are used for the per-segment offset instead of the EDL's
+    `end - start`; see the comment below for why that matters.
     """
     transcripts_dir = edit_dir / "transcripts"
     sources = edl["sources"]
 
+    # The offset has to be where the segment actually STARTS in the concatenated
+    # output. An extract is quantised to whole frames, so it is a fraction of a
+    # frame longer than `end - start`, and summing the EDL's floats accumulates
+    # that error: on a 30-segment, 3m34s edit the captions ran 0.598s early by the
+    # final cue. Measure the rendered clips when they are available.
+    measured: list[float] | None = None
+    if segment_paths:
+        if len(segment_paths) != len(edl["ranges"]):
+            print(f"  warning: {len(segment_paths)} clips for {len(edl['ranges'])} ranges;"
+                  f" falling back to EDL durations for caption offsets")
+        else:
+            try:
+                measured = [probe_duration(p) for p in segment_paths]
+                drift = sum(measured) - sum(float(r["end"]) - float(r["start"])
+                                            for r in edl["ranges"])
+                print(f"  caption offsets from measured segments (drift vs EDL: {drift:+.3f}s)")
+            except (subprocess.CalledProcessError, ValueError, OSError) as exc:
+                print(f"  warning: could not measure segments ({exc}); using EDL durations")
+                measured = None
+
     entries: list[tuple[float, float, str]] = []
     seg_offset = 0.0
 
-    for r in edl["ranges"]:
+    for seg_i, r in enumerate(edl["ranges"]):
         src_name = r["source"]
         seg_start = float(r["start"])
         seg_end = float(r["end"])
-        seg_duration = seg_end - seg_start
+        seg_duration = measured[seg_i] if measured else (seg_end - seg_start)
 
         tr_path = transcripts_dir / f"{src_name}.json"
         if not tr_path.exists():
@@ -743,7 +778,7 @@ def main() -> None:
     if not args.no_subtitles:
         if args.build_subtitles:
             subs_path = edit_dir / "master.srt"
-            build_master_srt(edl, edit_dir, subs_path)
+            build_master_srt(edl, edit_dir, subs_path, segment_paths)
         elif edl.get("subtitles"):
             subs_path = resolve_path(edl["subtitles"], edit_dir)
             if not subs_path.exists():
