@@ -100,13 +100,18 @@ def _sample_frame_stats(
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as f:
         metadata_path = f.name
 
+    # The path sits inside a filter string, where ':' separates options and '\'
+    # escapes. A Windows path like C:\Users\... breaks both, so use forward
+    # slashes, escape the drive colon, and quote the value.
+    metadata_arg = Path(metadata_path).as_posix().replace(":", r"\:")
+
     try:
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats",
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file='{metadata_arg}'",
             "-f", "null", "-",
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
