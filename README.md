@@ -60,7 +60,8 @@ ln -sfn ~/Developer/video-use ~/.claude/skills/video-use        # Claude Code
 # 2. Install deps
 cd ~/Developer/video-use
 uv sync                         # or: pip install -e .
-brew install ffmpeg             # required
+brew install ffmpeg-full        # required — plain `ffmpeg` lacks libass, so
+brew link --overwrite ffmpeg-full   # subtitle burn-in (Hard Rule 1) silently breaks
 brew install yt-dlp             # optional, for downloading online sources
 
 # 3. Add your ElevenLabs API key

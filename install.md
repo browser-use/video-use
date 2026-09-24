@@ -50,22 +50,29 @@ command -v uv >/dev/null && uv sync || pip install -e .
 
 ### 3. Install ffmpeg (+ optional yt-dlp)
 
-`ffmpeg` and `ffprobe` are hard requirements. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation engines such as HyperFrames, Remotion, and Manim are installed lazily the first time a project actually needs them.
+`ffmpeg` and `ffprobe` are hard requirements. `ffmpeg` specifically **must be built with `libass`** — Hard Rule 1 (subtitles burned in) depends on the `subtitles` filter, which doesn't exist without it. `yt-dlp` is only needed if the user wants to pull sources from URLs. Animation engines such as HyperFrames, Remotion, and Manim are installed lazily the first time a project actually needs them.
 
 ```bash
-# macOS
-command -v ffmpeg >/dev/null || brew install ffmpeg
+# macOS — Homebrew's plain `ffmpeg` formula ships WITHOUT libass (no subtitles
+# filter). `ffmpeg-full` has it. Check first; only reinstall if missing.
+if ! ffmpeg -h filter=subtitles 2>&1 | grep -q "Filter subtitles"; then
+  brew install ffmpeg-full
+  brew link --overwrite ffmpeg-full
+fi
 command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 
-# Debian / Ubuntu
+# Debian / Ubuntu — apt's ffmpeg is built with libass by default, but verify:
 # sudo apt-get update && sudo apt-get install -y ffmpeg
+# ffmpeg -h filter=subtitles 2>&1 | grep -q "Filter subtitles" || echo "rebuild ffmpeg with --enable-libass"
 # pip install yt-dlp
 
-# Arch
+# Arch — pacman's ffmpeg is built with libass by default, but verify the same way.
 # sudo pacman -S ffmpeg yt-dlp
 ```
 
 If `brew` / `apt` / `pacman` requires a sudo prompt, tell the user the exact command and wait. Do not invent a password.
+
+`brew link --overwrite ffmpeg-full` repoints the global `ffmpeg`/`ffprobe` symlinks at the fuller build — it's a system-wide change (any other tool that shells out to `ffmpeg` gets the new binary too). `ffmpeg-full` is a superset of plain `ffmpeg` so this is safe in practice, but tell the user what you're doing rather than silently relinking.
 
 ### 4. Register the skill with the current agent
 
@@ -132,6 +139,7 @@ Run one real thing. Prefer the lightest verification that still proves the pipel
 ```bash
 python ~/Developer/video-use/helpers/timeline_view.py --help >/dev/null && echo "helpers OK"
 ffprobe -version | head -1
+ffmpeg -h filter=subtitles 2>&1 | grep -q "Filter subtitles" && echo "libass OK (subtitles filter present)"
 ```
 
 Full transcription test is optional at install time — it burns Scribe credits. Better to wait until the user hands you their first clip.
@@ -154,7 +162,7 @@ Tell the user, in one short message:
 
 - Symlink the **whole directory**, not just `SKILL.md`. The helpers need to sit next to it.
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
-- `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
+- `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough — as long as it has `libass` (check with `ffmpeg -h filter=subtitles`). A build without it will fail deep into a render, at the subtitles-burn step, which is a much worse place to discover this than at install time.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
 - Node.js/npm are only needed for HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
 - HyperFrames, Remotion, and Manim are optional animation engines. Don't install or prefer one globally during setup; pick the engine per animation slot in `SKILL.md`. HyperFrames can run through `npx --yes hyperframes ...` in the slot directory. Remotion can be scaffolded with `npx create-video@latest` or installed inside the slot before rendering.
