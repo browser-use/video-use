@@ -75,7 +75,7 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
-- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
+- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline. `--height` sets the output height (default 1080) and `--crf` the extract quality (default 16 final / 22 preview) — see *Output quality* below.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
@@ -281,7 +281,7 @@ Sound is where generated videos sound cheap. Worked rules from launch edits:
 
 ## Output spec
 
-Match the source unless the user asked for something specific. Common targets: `1920×1080@24` cinematic, `1920×1080@30` screen content, `1080×1920@30` vertical social, `3840×2160@24` 4K cinema, `1080×1080@30` square. `render.py` defaults the scale to 1080p from any source; pass `--filter` or edit the extract command for other targets. Worth asking the user which delivery format matters.
+Match the source unless the user asked for something specific. Common targets: `1920×1080@24` cinematic, `1920×1080@30` screen content, `1080×1920@30` vertical social, `3840×2160@24` 4K cinema, `1080×1080@30` square. `render.py` defaults the scale to 1080p from any source; pass `--height` for other targets (e.g. `--height 2160` to deliver at a 4K source's own resolution, `--height 1920` for vertical). Width follows the source aspect, so `--height` is the only resolution knob you need — do not hand-edit the extract command. Worth asking the user which delivery format matters.
 
 ## EDL format
 
@@ -305,6 +305,19 @@ Match the source unless the user asked for something specific. Common targets: `
 ```
 
 `grade` is a preset name or raw ffmpeg filter. `overlays` are rendered animation clips. `subtitles` is optional and applied LAST.
+
+`audio_filter` is an optional global audio chain (denoise, EQ) applied per segment **before** the 30ms fades, so the fades stay on the true segment edges (Hard Rule 3).
+
+`ranges[].zoom` is an optional per-segment push-in (a number ≥ 1.0, with `zoom_x` 0–1 biasing the crop horizontally, default 0.45). Use it to disguise jump cuts on a static single-camera shot: crop to 1/zoom of the frame, then scale back. It is a plain number rather than a filter string precisely so one EDL stays correct at every output resolution. `ranges[].filter` remains available as a raw per-segment escape hatch, but a hardcoded `crop` is only valid at one output height, and **any per-segment dimension mismatch breaks the lossless concat** (Hard Rule 2).
+
+## Output quality
+
+The video is encoded **twice**: once per segment on extract, then again to composite overlays and burn subtitles. The concat and the loudness pass are both `-c copy`, so those are lossless. This means the **extract CRF is the quality ceiling** — the composite encode can only add loss on top of it, never recover detail.
+
+- `--crf` sets that ceiling. Defaults: 16 final, 22 `--preview`, 28 `--draft`. The composite encode is derived as `crf - 2`.
+- `--height` sets the output height; the default 1080 downscales a 4K source and throws away three quarters of its pixels. Pass `--height 2160` to deliver at the source resolution and skip that generation entirely.
+
+If someone reports the output looking soft or compressed, check **bits per pixel**, not bitrate: a 50 Mbps 4K source and a 12.7 Mbps 1080p render are both ≈0.25 bits/px, which means the loss came from discarded pixels and stacked generations rather than bitrate starvation.
 
 ## Memory — `project.md`
 
