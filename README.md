@@ -68,6 +68,43 @@ cp .env.example .env
 $EDITOR .env                    # ELEVENLABS_API_KEY=...
 ```
 
+## Setup troubleshooting
+
+Use this checklist when the setup prompt or manual install gets stuck. Most install failures come from a missing system tool, running the command from the wrong directory, or an unset API key.
+
+### Prerequisites
+
+- **Install `ffmpeg` first.** The editing helpers shell out to `ffmpeg`/`ffprobe` for media inspection and rendering.
+- On macOS, install it with `brew install ffmpeg`.
+- On Ubuntu/Debian, install it with `sudo apt-get update && sudo apt-get install -y ffmpeg`.
+- **Verify `ffmpeg` is on your `PATH`.** Run `ffmpeg -version` and `ffprobe -version` in the same terminal your agent uses.
+- If either command is missing after installation, restart the shell or fix `PATH` before editing footage.
+- **Use Python 3.10 or newer.** The package metadata requires Python 3.10+, so check with `python --version` or `python3 --version`.
+- **Use `uv` or `pip` for Python dependencies.** From the repository root, prefer `uv sync`.
+- If you do not use `uv`, run `python -m pip install -e .` from the repository root.
+- **Install `uv` if needed.** If `uv sync` prints `command not found`, install it from [docs.astral.sh/uv](https://docs.astral.sh/uv/) or use the `pip` command above instead.
+- **Optional download support needs `yt-dlp`.** Install it only if you want to pull online videos into your source folder; local-file editing does not require it.
+- **Animation extras are optional.** Manim/Remotion/HyperFrames/PIL overlays may need additional toolchains, but the core transcript-and-cut workflow only needs the base Python dependencies, `ffmpeg`, and the API key.
+
+### Environment and agent setup
+
+- **Create a local `.env`.** Copy `.env.example` to `.env` in the repository root; do not commit your filled-in `.env` file.
+- **Set `ELEVENLABS_API_KEY`.** Transcription requires an ElevenLabs key. Put it in `.env` as `ELEVENLABS_API_KEY=your_key_here`, or export it in the shell before running helpers.
+- **Keep secrets out of prompts and commits.** Ask the agent to read the key from `.env` or the environment instead of pasting it into a reusable prompt or checked-in file.
+- **Run commands from the repo root.** `uv sync`, `pip install -e .`, and skill registration commands assume the current directory is the cloned `video-use` repository.
+- **Check the skill symlink target.** If your agent cannot find `video-use`, confirm the symlink points at this repository.
+- For Claude Code, a typical target is `~/.claude/skills/video-use -> ~/Developer/video-use`.
+- For Codex, use the matching skills directory shown in the manual install comments above.
+- **Restart your agent after registration.** Some agents only scan skills at startup, so a fresh session may be needed before `video-use` appears.
+
+### Quick smoke checks
+
+- Run `python -c "import requests, librosa, matplotlib, PIL, numpy; print('deps ok')"` to catch missing Python dependencies early.
+- Run `ffmpeg -version` to confirm the renderer is available.
+- Run `ffprobe -version` to confirm media probing is available.
+- If the dependency check fails, rerun `uv sync` or `python -m pip install -e .` from the repo root.
+- If transcription fails immediately, re-check that `ELEVENLABS_API_KEY` is present in `.env` or exported in the same shell your agent uses.
+
 ## How it works
 
 The LLM never watches the video. It **reads** it — through two layers that together give it everything it needs to cut with word-boundary precision.
