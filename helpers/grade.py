@@ -34,6 +34,16 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Windows consoles default to cp1252, which raises UnicodeEncodeError on the
+# Unicode arrows/em-dashes in the status prints below. Force UTF-8 on stdout/
+# stderr so this helper behaves identically on Windows, macOS, and Linux.
+# No-op where the stream is already UTF-8 or can't be reconfigured.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 PRESETS: dict[str, str] = {
     # Subtle baseline — barely perceptible cleanup. No color shift.
@@ -75,6 +85,25 @@ def get_preset(name: str) -> str:
 # -------- Auto grade (data-driven, per-clip) --------------------------------
 
 
+def _metadata_filter_target(path: str) -> tuple[str, str]:
+    r"""Return (cwd, filter_value) for writing an ffmpeg metadata file safely.
+
+    ffmpeg filtergraphs treat ':' and '\' as delimiters, so embedding a Windows
+    path like C:\Users\me\tmp.txt in 'metadata=print:file=...' breaks parsing
+    and ffmpeg exits with an error. Instead we pass the bare filename and run
+    ffmpeg with cwd set to the file's directory, so no special character ever
+    reaches the filtergraph parser.
+
+    Split on either separator ('/' or '\') rather than host-native pathlib, so
+    the bare filename is extracted the same way on any OS — the filter value
+    must never contain ':' or a path separator regardless of where this runs.
+    """
+    idx = max(path.rfind("/"), path.rfind("\\"))
+    if idx == -1:
+        return ".", path
+    return path[:idx], path[idx + 1:]
+
+
 def _sample_frame_stats(
     video: Path,
     start: float,
@@ -93,6 +122,11 @@ def _sample_frame_stats(
           "sat_mean": mean saturation in 0..1,
         }
     """
+    # Resolve to an absolute path before the ffmpeg call below: that call sets
+    # cwd to the temp dir (for the metadata file), so a relative `-i <video>`
+    # would otherwise resolve against the temp dir and fail.
+    video = Path(video).resolve()
+
     # Use signalstats + metadata=print to get per-frame stats
     # Sample fps = n_samples / duration, clamped so we don't over-sample short clips
     fps = max(0.5, min(n_samples / max(duration, 0.1), 10.0))
@@ -100,16 +134,21 @@ def _sample_frame_stats(
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as f:
         metadata_path = f.name
 
+    # Pass a bare filename + run ffmpeg from the file's directory so no Windows
+    # path (with ':' and '\') ever reaches the filtergraph parser. See
+    # _metadata_filter_target.
+    metadata_dir, metadata_name = _metadata_filter_target(metadata_path)
+
     try:
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats",
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_name}",
             "-f", "null", "-",
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(cmd, check=True, cwd=metadata_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # Parse signalstats metadata. Signalstats reports values in the NATIVE
         # bit depth of the decoded frame (8-bit → 0-255, 10-bit → 0-1023). We

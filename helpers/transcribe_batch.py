@@ -22,6 +22,16 @@ from pathlib import Path
 
 from transcribe import load_api_key, transcribe_one, transcript_path
 
+# Windows consoles default to cp1252, which raises UnicodeEncodeError on the
+# Unicode arrows/em-dashes in the status prints below. Force UTF-8 on stdout/
+# stderr so this helper behaves identically on Windows, macOS, and Linux.
+# No-op where the stream is already UTF-8 or can't be reconfigured.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
 
