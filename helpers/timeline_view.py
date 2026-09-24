@@ -31,6 +31,13 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
+# Windows consoles default to cp1252 and cannot encode '→' / '≥' from the
+# status output below; printing one raises UnicodeEncodeError. Force UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 # -------- Frame extraction ---------------------------------------------------
 
 
@@ -157,6 +164,12 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/SFNSMono.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    # Windows — without these, PIL falls back to a fixed-size bitmap font that
+    # ignores the requested size, making word labels unreadable at decision time.
+    "C:/Windows/Fonts/consola.ttf",
+    "C:/Windows/Fonts/cour.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
+    "C:/Windows/Fonts/arial.ttf",
 ]
 
 

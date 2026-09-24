@@ -23,6 +23,13 @@ from pathlib import Path
 from transcribe import load_api_key, transcribe_one, transcript_path
 
 
+# Windows consoles default to cp1252 and cannot encode the '→' in the progress
+# output below; printing one raises UnicodeEncodeError. Force UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
 
 
