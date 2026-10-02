@@ -8,8 +8,6 @@ Introducing **video-use** — edit videos with Claude Code. 100% open source.
 
 Drop raw footage in a folder, chat with Claude Code, get `final.mp4` back. Works for any content — talking heads, montages, tutorials, travel, interviews — without presets or menus.
 
-Try video-use in [Browser Use Cloud](https://cloud.browser-use.com/v4?utm_campaign=video-use-use-in-cloud&utm_source=github).
-
 ## What it does
 
 - **Cuts out filler words** (`umm`, `uh`, false starts) and dead space between takes
