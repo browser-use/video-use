@@ -16,6 +16,13 @@ class FindVideosTests(unittest.TestCase):
                 find_videos(Path(tmp))
             self.assertIn("intro.mov, intro.mp4", str(ctx.exception))
 
+    def test_rejects_stems_differing_only_by_case(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("Intro.mp4", "intro.mov"):
+                (Path(tmp) / name).touch()
+            with self.assertRaises(SystemExit):
+                find_videos(Path(tmp))
+
     def test_distinct_stems_pass(self):
         with tempfile.TemporaryDirectory() as tmp:
             for name in ("a.mp4", "b.mov"):
