@@ -31,6 +31,15 @@ def find_videos(videos_dir: Path) -> list[Path]:
         p for p in videos_dir.iterdir()
         if p.is_file() and p.suffix in VIDEO_EXTS
     )
+    # Transcripts are named by stem (the stem is the source id everywhere
+    # downstream), so intro.mp4 and intro.mov would share one transcript.
+    by_stem: dict[str, list[str]] = {}
+    for v in videos:
+        by_stem.setdefault(v.stem, []).append(v.name)
+    clashes = [names for names in by_stem.values() if len(names) > 1]
+    if clashes:
+        sys.exit("videos share a name and would share a transcript, rename one of: "
+                 + "; ".join(", ".join(names) for names in clashes))
     return videos
 
 
