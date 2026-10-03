@@ -577,8 +577,10 @@ def apply_loudnorm_two_pass(
     Returns False if the audio is digital silence (nothing to normalize); the
     input is then copied to output_path unchanged. Returns True otherwise.
 
-    In preview mode, uses a one-pass approximation for speed. Final mode does
-    the proper two-pass.
+    Both modes run the measurement pass (audio-only, cheap next to the video
+    encode) because it is the only way to detect silence. Preview then uses a
+    one-pass approximation; final mode feeds the measurement into a true
+    two-pass.
     """
     measurement = measure_loudness(input_path)
     # EBU R128 gates out blocks below -70 LUFS, so silence measures -inf, which
