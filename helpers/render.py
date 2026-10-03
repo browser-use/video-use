@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
+import shutil
 import subprocess
 import sys
 from fractions import Fraction
@@ -572,13 +574,23 @@ def apply_loudnorm_two_pass(
 ) -> bool:
     """Run two-pass loudnorm on input_path, write normalized copy to output_path.
 
-    Returns True on success, False if measurement failed (caller should fall
-    back to copying the input unchanged).
+    Returns False if the audio is digital silence (nothing to normalize); the
+    input is then copied to output_path unchanged. Returns True otherwise.
 
-    In preview mode, skips the measurement pass and uses a one-pass approximation
-    for speed. Final mode always does the proper two-pass.
+    In preview mode, uses a one-pass approximation for speed. Final mode does
+    the proper two-pass.
     """
-    if preview:
+    measurement = measure_loudness(input_path)
+    # EBU R128 gates out blocks below -70 LUFS, so silence measures -inf, which
+    # loudnorm can neither apply (NaN samples) nor take as measured_I.
+    if measurement is not None and not math.isfinite(float(measurement["input_i"])):
+        print("  audio is silent — skipping loudnorm")
+        shutil.copyfile(input_path, output_path)
+        return False
+
+    if preview or measurement is None:
+        if measurement is None and not preview:
+            print("  loudnorm measurement failed — falling back to 1-pass")
         # One-pass approximation — faster, slightly less accurate.
         filter_str = f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}"
         cmd = [
@@ -593,13 +605,6 @@ def apply_loudnorm_two_pass(
         print(f"  loudnorm (1-pass preview) → {output_path.name}")
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         return True
-
-    # Full two-pass
-    print(f"  loudnorm pass 1: measuring {input_path.name}")
-    measurement = measure_loudness(input_path)
-    if measurement is None:
-        print("  loudnorm measurement failed — falling back to 1-pass")
-        return apply_loudnorm_two_pass(input_path, output_path, preview=True)
 
     print(f"    measured: I={measurement['input_i']} LUFS  "
           f"TP={measurement['input_tp']}  LRA={measurement['input_lra']}")
