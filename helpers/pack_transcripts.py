@@ -114,6 +114,7 @@ def group_into_phrases(
 
         if current_start is None:
             current_start = start
+        if current_speaker is None:
             current_speaker = speaker
         current_words.append(w)
         prev_end = w.get("end", start)
