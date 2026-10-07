@@ -118,7 +118,7 @@ def compute_envelope(video: Path, start: float, end: float, samples: int = 2000)
 def words_in_range(transcript_path: Path, start: float, end: float) -> list[dict]:
     if not transcript_path.exists():
         return []
-    data = json.loads(transcript_path.read_text())
+    data = json.loads(transcript_path.read_text(encoding="utf-8"))
     out: list[dict] = []
     for w in data.get("words", []):
         t = w.get("type", "word")
@@ -331,6 +331,8 @@ def render_timeline(
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Filmstrip + waveform composite for a video range")
     ap.add_argument("video", type=Path, nargs="?", help="Source video")
     ap.add_argument("start", type=float, nargs="?", help="Start time in seconds")
