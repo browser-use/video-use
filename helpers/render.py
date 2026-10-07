@@ -3,7 +3,7 @@
 Implements the HEURISTICS render pipeline in the correct order:
 
   1. Per-segment extract with color grade + 30ms audio fades baked in
-  2. Lossless -c copy concat into base.mp4
+  2. Lossless -c copy concat into base.mp4 + A/V parity check (--concat auto|filter re-times on drift)
   3. If overlays or subtitles: single filter graph that overlays animations
      (with PTS shift so frame 0 lands at the overlay window start)
      and applies `subtitles` filter LAST → final.mp4
@@ -379,15 +379,38 @@ def extract_all_segments(
     return seg_paths
 
 
-# -------- Lossless concat ----------------------------------------------------
+# -------- Concat (Rule 2) ---------------------------------------------------
+
+CONCAT_MODES = ("copy", "filter", "auto")
+AV_SKEW_LIMIT = 0.10  # seconds of |video - audio| duration drift tolerated on the base
 
 
-def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
-    """Lossless concat via the concat demuxer. No re-encode."""
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+def _stream_duration(path: Path, stream: str) -> float | None:
+    """Duration of one stream ("v:0" / "a:0") in seconds, or None if it can't be probed."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", stream,
+             "-show_entries", "stream=duration", "-of",
+             "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, check=True,
+        )
+        return float(out.stdout.strip().splitlines()[0])
+    except (subprocess.CalledProcessError, ValueError, IndexError, OSError):
+        return None
+
+
+def check_av_parity(path: Path) -> float | None:
+    """Return |video duration - audio duration| for `path` (None if unprobeable)."""
+    vdur, adur = _stream_duration(path, "v:0"), _stream_duration(path, "a:0")
+    if vdur is None or adur is None:
+        return None
+    print(f"  A/V parity: vdur={vdur:.3f} adur={adur:.3f} skew={abs(vdur - adur):.3f}s")
+    return abs(vdur - adur)
+
+
+def _concat_copy(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
     concat_list = edit_dir / "_concat.txt"
     concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
-
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
@@ -399,6 +422,71 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     print(f"concat → {out_path.name}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     concat_list.unlink(missing_ok=True)
+
+
+def _concat_filter(segment_paths: list[Path], out_path: Path) -> None:
+    # every segment was extracted at one shared rate; keep it exact (e.g. 30000/1001)
+    rate = probe_source_fps(segment_paths[0]) or "24"
+    n = len(segment_paths)
+    cmd: list[str] = ["ffmpeg", "-y"]
+    for p in segment_paths:
+        cmd += ["-i", str(p)]
+    streams = "".join(f"[{i}:v][{i}:a]" for i in range(n))
+    cmd += [
+        "-filter_complex", f"{streams}concat=n={n}:v=1:a=1[v][a]",
+        "-map", "[v]", "-map", "[a]",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "16",
+        "-pix_fmt", "yuv420p", "-r", rate,
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-movflags", "+faststart",
+        str(out_path),
+    ]
+    print(f"concat (filter, A/V-safe) → {out_path.name}")
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
+def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path, mode: str = "copy") -> None:
+    """Concat the extracted segments into the base, then check A/V parity.
+
+    mode="copy" (default): lossless concat demuxer, no re-encode; warns on A/V drift.
+    mode="filter": the concat FILTER re-times every stream onto one clock (one extra,
+      near-transparent CRF 16 encode); refuses to hand off a drifted base.
+    mode="auto": lossless copy first; if the parity check finds drift, redo the concat
+      with the filter. Lossless when it can be, A/V-safe when it must be.
+
+    Why drift can happen with copy: each segment is encoded independently, so its audio
+    and video end at slightly different times (AAC frames are 1024 samples; x264 GOPs
+    don't align to them). The demuxer stitches streams verbatim, and the drift can
+    surface on the FINAL segment as video ending before audio, chopping the last word
+    or end card (observed once at vdur 60.7 s vs adur 61.4 s on a 12-cut edit).
+    """
+    if mode not in CONCAT_MODES:
+        raise ValueError(f"concat mode must be one of {CONCAT_MODES}, got {mode!r}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not segment_paths:
+        raise ValueError("concat_segments: no segments to concat")
+
+    if mode == "filter":
+        _concat_filter(segment_paths, out_path)
+    else:
+        _concat_copy(segment_paths, out_path, edit_dir)
+
+    skew = check_av_parity(out_path)
+    if skew is None or skew <= AV_SKEW_LIMIT:
+        return
+    msg = (f"concat A/V skew {skew:.3f}s exceeds {AV_SKEW_LIMIT:.2f}s on {out_path.name}: "
+           "the last segment's tail is likely chopped (video ends before audio).")
+    if mode == "copy":
+        print(f"  WARNING: {msg} Re-render with --concat auto or --concat filter to re-time A/V onto one clock.")
+        return
+    if mode == "auto":
+        print(f"  {msg} Re-doing the concat with the filter (A/V-safe).")
+        _concat_filter(segment_paths, out_path)
+        skew = check_av_parity(out_path)
+        if skew is None or skew <= AV_SKEW_LIMIT:
+            return
+        msg = f"concat A/V skew {skew:.3f}s still exceeds {AV_SKEW_LIMIT:.2f}s after the filter re-time."
+    raise RuntimeError(msg + " Refusing to hand off a drifted base.")
 
 
 # -------- Master SRT (Rule 5) ------------------------------------------------
@@ -746,6 +834,14 @@ def main() -> None:
              "(falls back to 24 if it can't be probed). Pass e.g. --fps 30 or "
              "--fps 30000/1001 to force.",
     )
+    ap.add_argument(
+        "--concat",
+        choices=CONCAT_MODES,
+        default="copy",
+        help="Segment concat: 'copy' (default) = lossless demuxer, warns on A/V drift; 'filter' = one "
+             "near-transparent re-encode that re-times audio and video onto one clock; 'auto' = copy, "
+             "and redo with the filter only if the A/V parity check finds drift.",
+    )
     args = ap.parse_args()
 
     edl_path = args.edl.resolve()
@@ -769,7 +865,7 @@ def main() -> None:
     else:
         base_name = "base.mp4"
     base_path = edit_dir / base_name
-    concat_segments(segment_paths, base_path, edit_dir)
+    concat_segments(segment_paths, base_path, edit_dir, mode=args.concat)
 
     # 3. Subtitles: build if requested, resolve final path
     subs_path: Path | None = None
