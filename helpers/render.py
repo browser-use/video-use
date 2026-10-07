@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -383,16 +384,25 @@ def extract_all_segments(
 
 
 def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
-    """Lossless concat via the concat demuxer. No re-encode."""
+    """Concat via the concat demuxer.
+
+    Video is stream-copied (lossless). Audio is re-encoded to a single
+    continuous AAC stream because each extracted segment carries its own
+    encoder priming/padding samples; with `-c copy` those misalign at every
+    joint and produce an audible click (~100 ms after the boundary).
+    Re-encoding audio removes the priming mismatch while keeping video
+    lossless.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
-    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths), encoding="utf-8")
 
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
         "-i", str(concat_list),
-        "-c", "copy",
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
         str(out_path),
     ]
@@ -535,7 +545,9 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
     """Run ffmpeg loudnorm first pass and parse the JSON measurement.
 
     Returns a dict with measured_i, measured_tp, measured_lra, measured_thresh,
-    target_offset, or None if measurement failed.
+    target_offset, or None if measurement failed or values are non-finite
+    (e.g. digital silence produces -inf for input_i/input_tp, which would
+    crash the second-pass filter parse).
     """
     filter_str = (
         f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}:print_format=json"
@@ -547,10 +559,8 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
         "-vn", "-f", "null", "-",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
-    # loudnorm prints the JSON to stderr at the end of the run
     stderr = proc.stderr
 
-    # Find the JSON block — loudnorm output contains a `{ ... }` block
     start = stderr.rfind("{")
     end = stderr.rfind("}")
     if start == -1 or end == -1 or end <= start:
@@ -562,6 +572,13 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
     needed = {"input_i", "input_tp", "input_lra", "input_thresh", "target_offset"}
     if not needed.issubset(data.keys()):
         return None
+    for key in needed:
+        try:
+            v = float(data[key])
+        except (ValueError, TypeError):
+            return None
+        if math.isinf(v) or math.isnan(v):
+            return None
     return data
 
 
