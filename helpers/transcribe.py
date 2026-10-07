@@ -31,6 +31,8 @@ import requests
 
 
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+# Scribe v2: same JSON shape as v1, listed at $0.22/audio-hour (2026-10). Override with SCRIBE_MODEL=scribe_v1.
+SCRIBE_MODEL = os.environ.get("SCRIBE_MODEL", "scribe_v2")
 
 
 def load_api_key() -> str:
@@ -88,7 +90,7 @@ def call_scribe(
     num_speakers: int | None = None,
 ) -> dict:
     data: dict[str, str] = {
-        "model_id": "scribe_v1",
+        "model_id": SCRIBE_MODEL,
         "diarize": "true",
         "tag_audio_events": "true",
         "timestamps_granularity": "word",
