@@ -1,0 +1,810 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "kind": "asset",
+      "id": "polyhaven-studio-small-09-1k",
+      "title": "Studio Small 09 HDRI",
+      "tags": [
+        "hdri",
+        "lighting",
+        "studio",
+        "3d",
+        "cc0"
+      ],
+      "summary": "1024×512 real HDR studio environment with large softbox reflections. Use for illumination and reflections; do not show the room unless it belongs in the scene.",
+      "source_url": "https://polyhaven.com/a/studio_small_09",
+      "license": {
+        "name": "CC0-1.0",
+        "url": "https://polyhaven.com/license",
+        "redistribution": true,
+        "attribution": "Optional credit: Studio Small 09 by Sergej Majboroda / Poly Haven, CC0."
+      },
+      "downloads": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr",
+          "filename": "studio_small_09_1k.hdr",
+          "sha256": "e7cfda5f4e98e623db12b8bfd0184e048488e4855d9c83e2751fb44a32e80c45",
+          "bytes": 1615248
+        }
+      ],
+      "verified_at": "2026-09-14",
+      "related": [
+        "polyhaven"
+      ],
+      "creator": "Sergej Majboroda / Poly Haven"
+    },
+    {
+      "kind": "asset",
+      "id": "polyhaven-metal-plate-02-1k",
+      "title": "Metal Plate 02 PBR maps",
+      "tags": [
+        "pbr",
+        "texture",
+        "metal",
+        "weathered",
+        "3d",
+        "cc0"
+      ],
+      "summary": "Four 1024×1024 JPG maps: diffuse, roughness, metalness and OpenGL normal. Worn industrial steel with panel seams; select for weathered material direction, not a clean brushed-metal substitute.",
+      "source_url": "https://polyhaven.com/a/metal_plate_02",
+      "license": {
+        "name": "CC0-1.0",
+        "url": "https://polyhaven.com/license",
+        "redistribution": true,
+        "attribution": "Optional credit: Metal Plate 02 by Rob Tuytel / Poly Haven, CC0."
+      },
+      "downloads": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate_02/metal_plate_02_diff_1k.jpg",
+          "filename": "metal_plate_02_diff_1k.jpg",
+          "sha256": "6e80877d0e9d5973d96298c6091df7ace906b0a6760afc4f3592e4855f3f1d4c",
+          "bytes": 625917
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate_02/metal_plate_02_rough_1k.jpg",
+          "filename": "metal_plate_02_rough_1k.jpg",
+          "sha256": "73a6bd6393f6de7be42058584c2d382f2a3e9148ceabc2d02e748e2c860e74d1",
+          "bytes": 911772
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate_02/metal_plate_02_metal_1k.jpg",
+          "filename": "metal_plate_02_metal_1k.jpg",
+          "sha256": "fb1b120a2be5887dfeebed7a198a8151b292e963713d914b74ed7669434afb41",
+          "bytes": 551170
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate_02/metal_plate_02_nor_gl_1k.jpg",
+          "filename": "metal_plate_02_nor_gl_1k.jpg",
+          "sha256": "58736fbb8aa4fc6690cf8152b174db65caf22a766375b625fb0087e1bc955bc7",
+          "bytes": 183264
+        }
+      ],
+      "verified_at": "2026-09-14",
+      "related": [
+        "polyhaven"
+      ],
+      "creator": "Rob Tuytel / Poly Haven"
+    },
+    {
+      "kind": "asset",
+      "id": "google-fonts-sora-variable",
+      "title": "Sora variable font",
+      "tags": [
+        "font",
+        "variable",
+        "typography",
+        "ofl",
+        "supplemental"
+      ],
+      "summary": "Locally embeddable variable TTF with weight 100–800. Retain the supplied OFL and copyright notice; fonts may not be sold alone. Supplemental source, not directly discovered on Motionimo.",
+      "source_url": "https://github.com/google/fonts/tree/69109d1f48319d1d474a8d2f70018efc2346a3a7/ofl/sora",
+      "license": {
+        "name": "OFL-1.1",
+        "url": "https://raw.githubusercontent.com/google/fonts/69109d1f48319d1d474a8d2f70018efc2346a3a7/ofl/sora/OFL.txt",
+        "redistribution": true,
+        "attribution": "Retain Copyright 2019 The Sora Project Authors and the complete OFL.txt with redistributed font software."
+      },
+      "downloads": [
+        {
+          "url": "https://raw.githubusercontent.com/google/fonts/69109d1f48319d1d474a8d2f70018efc2346a3a7/ofl/sora/Sora%5Bwght%5D.ttf",
+          "filename": "Sora-wght.ttf",
+          "sha256": "84ff7096ae3ec6c8be47d906d1a0ba4de7f2ce78c615275c77301964a316e16c",
+          "bytes": 111400
+        },
+        {
+          "url": "https://raw.githubusercontent.com/google/fonts/69109d1f48319d1d474a8d2f70018efc2346a3a7/ofl/sora/OFL.txt",
+          "filename": "OFL.txt",
+          "sha256": "ba0b9729c9428ba79a0459ab8ec575791b51509dbec213e383d0316d37fec299",
+          "bytes": 4385
+        }
+      ],
+      "verified_at": "2026-09-14",
+      "related": [
+        "google-fonts"
+      ],
+      "creator": "The Sora Project Authors; designers Jonathan Barnbrook and Julián Moncada"
+    },
+    {
+      "kind": "resource",
+      "id": "polyhaven",
+      "title": "Poly Haven",
+      "tags": [
+        "hdri",
+        "pbr",
+        "3d",
+        "motionimo"
+      ],
+      "summary": "Motionimo-listed CC0 HDRIs, materials and models. Asset grants permit raw redistribution; site previews and API access have separate conditions.",
+      "source_url": "https://polyhaven.com",
+      "license": {
+        "name": "CC0-1.0",
+        "url": "https://polyhaven.com/license",
+        "redistribution": true,
+        "attribution": "Attribution is optional; provenance credit is appreciated."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Older indexed Motionimo resource page; current availability checked at provider",
+        "source_url": "https://www.motionimo.xyz/resource/polyheaven"
+      }
+    },
+    {
+      "kind": "resource",
+      "id": "ambientcg",
+      "title": "ambientCG",
+      "tags": [
+        "pbr",
+        "texture",
+        "cc0",
+        "supplemental"
+      ],
+      "summary": "Supplemental CC0 materials and environments. Raw project files may be distributed. Prefer a selected material over a library dump.",
+      "source_url": "https://ambientcg.com",
+      "license": {
+        "name": "CC0-1.0",
+        "url": "https://docs.ambientcg.com/license/",
+        "redistribution": true,
+        "attribution": "Attribution optional; preserve asset provenance."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Supplemental primary-source research; no direct Motionimo listing verified"
+      }
+    },
+    {
+      "kind": "resource",
+      "id": "kenney",
+      "title": "Kenney",
+      "tags": [
+        "3d",
+        "svg",
+        "sprite",
+        "cc0",
+        "supplemental"
+      ],
+      "summary": "Supplemental coherent stylized props, sprites and effects. Game assets on asset pages are CC0; the studio logo is reserved.",
+      "source_url": "https://kenney.nl/assets",
+      "license": {
+        "name": "CC0-1.0 for asset-page game assets",
+        "url": "https://kenney.nl/support",
+        "redistribution": true,
+        "attribution": "Attribution optional; do not use the Kenney logo as project branding."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Supplemental primary-source research; no direct Motionimo listing verified"
+      }
+    },
+    {
+      "kind": "resource",
+      "id": "google-fonts",
+      "title": "Google Fonts",
+      "tags": [
+        "font",
+        "typography",
+        "supplemental"
+      ],
+      "summary": "Supplemental local fonts. Check each font license and retain it with the font; the catalog does not replace item-level review.",
+      "source_url": "https://github.com/google/fonts",
+      "license": {
+        "name": "Per-font license",
+        "url": "https://github.com/google/fonts",
+        "redistribution": false,
+        "attribution": "Inspect the selected font license. OFL fonts require their copyright and license when redistributed."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Supplemental primary-source research; no direct Motionimo listing verified"
+      }
+    },
+    {
+      "kind": "resource",
+      "id": "tabler-icons",
+      "title": "Tabler Icons",
+      "tags": [
+        "svg",
+        "icon",
+        "mit",
+        "supplemental"
+      ],
+      "summary": "Supplemental editable symbol paths for requested UI or explanatory roles; avoid adding ornamental interface furniture. Brand icons do not grant trademark rights.",
+      "source_url": "https://github.com/tabler/tabler-icons",
+      "license": {
+        "name": "MIT",
+        "url": "https://github.com/tabler/tabler-icons/blob/main/LICENSE",
+        "redistribution": true,
+        "attribution": "Retain Paweł Kuna copyright and the MIT permission notice in copies or substantial portions."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Supplemental primary-source research; no direct Motionimo listing verified"
+      }
+    },
+    {
+      "kind": "resource",
+      "id": "poline",
+      "title": "Poline",
+      "tags": [
+        "palette",
+        "color",
+        "tool",
+        "motionimo"
+      ],
+      "summary": "Motionimo-listed palette-generation code. Use to explore related colors under art direction; it is not a raster asset library.",
+      "source_url": "https://github.com/meodai/poline",
+      "license": {
+        "name": "MIT",
+        "url": "https://raw.githubusercontent.com/meodai/poline/main/LICENSE",
+        "redistribution": true,
+        "attribution": "Retain David Aerne copyright and the MIT permission notice in copies or substantial portions."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Older indexed Motionimo resource page; current availability checked at provider",
+        "source_url": "https://www.motionimo.xyz/resource/poline"
+      }
+    },
+    {
+      "kind": "resource",
+      "id": "sketchfab",
+      "title": "Sketchfab",
+      "tags": [
+        "3d",
+        "scan",
+        "conditional",
+        "motionimo"
+      ],
+      "summary": "Motionimo-listed model marketplace. License and download availability vary by model; API downloading requires user authentication. No blanket redistribution approval.",
+      "source_url": "https://sketchfab.com",
+      "license": {
+        "name": "Per-model Creative Commons or other license",
+        "url": "https://sketchfab.com/developers/download-api/guidelines",
+        "redistribution": false,
+        "attribution": "Record the creator, model page and exact license; required attribution must accompany every use."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Older indexed Motionimo resource page; current availability checked at provider",
+        "source_url": "https://www.motionimo.xyz/resource/dimensiva"
+      }
+    },
+    {
+      "kind": "resource",
+      "id": "animography",
+      "title": "Animography",
+      "tags": [
+        "font",
+        "after-effects",
+        "reference",
+        "conditional",
+        "motionimo"
+      ],
+      "summary": "Motionimo-listed editable animated typefaces. Valuable motion study and licensed project assets; current FAQ restricts source redistribution even when a product is free.",
+      "source_url": "https://animography.net",
+      "license": {
+        "name": "Animography proprietary license",
+        "url": "https://animography.net/pages/faq",
+        "redistribution": false,
+        "attribution": "No blanket source redistribution. A client receiving typeface-containing source files requires its own license."
+      },
+      "verified_at": "2026-09-14",
+      "discovery": {
+        "method": "Older indexed Motionimo resource page; current availability checked at provider",
+        "source_url": "https://www.motionimo.xyz/resource/animography"
+      }
+    },
+    {
+      "id": "lilium-flower-family",
+      "title": "LILIUM — flower as a family of images",
+      "source_url": "https://x.com/motionimo/status/2099347548100071715",
+      "creator": "yuk.aji (credited by Motionimo repost)",
+      "tags": [
+        "asset-family",
+        "macro",
+        "editorial",
+        "masks",
+        "botanical"
+      ],
+      "summary": "One flower links full silhouette, petal macros, anatomy and graphic masks. Transfer related views and scale changes; omit specimen labels for a hero-only brief.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Decoded 6.76 s repost, 1280×720, 202 video frames at 30 fps; sampled at 3 fps. Original creator publication and source files not independently verified.",
+        "observed_beats": [
+          "0–0.7 s: flower silhouette and grid",
+          "1–2 s: petal macro and pixel masks",
+          "2–3.7 s: red field and related flower details",
+          "3.7–4.7 s: enlarged deforming type",
+          "4.7–6.7 s: flower returns through alternate graphic states"
+        ],
+        "media": [
+          {
+            "media_url": "https://video.twimg.com/ext_tw_video/2099347525433995273/pu/vid/avc1/1280x720/rifowSHi4aQdTz9G.mp4?tag=12",
+            "sha256": "2300a9b303bd251df51465b83b0cee52634d3b846842e1a61bf95632a246eacb",
+            "bytes": 1507537,
+            "hash_scope": "Retained public rendition",
+            "timecode_origin": "Repost clip start"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "reveal related scales",
+        "asset_roles": [
+          "flower cutout",
+          "petal detail crops",
+          "alternate flower states",
+          "authored masks"
+        ],
+        "preserved_property": "Flower identity and a restricted red/black/white/cyan visual language.",
+        "original_transfer": "An original shell alternates full silhouette, ridge macro and interior spiral; a ridge mask carries the cut."
+      },
+      "limitations": "Reference type and annotation belong to the observed composition and should only inform a new brief when relevant"
+    },
+    {
+      "id": "music-player-state-journey",
+      "title": "Day 01/30 — icon becomes a usable player",
+      "source_url": "https://x.com/motionimo/status/2099166429379490004",
+      "creator": "cre8.designq (credited by Motionimo repost)",
+      "tags": [
+        "state-transition",
+        "product",
+        "interaction",
+        "context",
+        "identity"
+      ],
+      "summary": "A music icon becomes a physical player, appears in a hand and settles into a tabletop context. Each new representation reveals another use relationship.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Decoded 11.38 s repost, 1280×720, 340 video frames at 30 fps; sampled at 2 fps. Source project and production tools unknown.",
+        "observed_beats": [
+          "0–2.3 s: music icon selection",
+          "2.5–3.7 s: icon becomes a white/silver player",
+          "3.8–6.3 s: hand and song-selection interaction",
+          "6.5 s onward: released player settles on a table"
+        ],
+        "media": [
+          {
+            "media_url": "https://video.twimg.com/ext_tw_video/2099166411444621314/pu/vid/avc1/1280x720/ywMs2_O2yXAouvkH.mp4?tag=12",
+            "sha256": "519bb1fb41dfdfb8911b2372e4db6d795a55a236a7870f92bf7ba19d0bd82282",
+            "bytes": 1125737,
+            "hash_scope": "Retained public rendition",
+            "timecode_origin": "Repost clip start"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "instantiate then use",
+        "asset_roles": [
+          "graphic mark",
+          "device views",
+          "hand interaction",
+          "tabletop context"
+        ],
+        "preserved_property": "Recognizable music/device identity across representation changes.",
+        "original_transfer": "An original seed symbol becomes a seed capsule, splits at a seam and releases its seed; the same contour survives each state."
+      },
+      "limitations": "Logos screen artwork hand footage and music remain reference material requiring separate authorization for reuse"
+    },
+    {
+      "id": "huncho-pine-labs",
+      "title": "Pine Labs Agentic Org Intro — commerce through connected surfaces",
+      "source_url": "https://studiohuncho.com/work/%20pine-labs",
+      "creator": "Studio Huncho",
+      "tags": [
+        "commerce",
+        "state-transition",
+        "occlusion",
+        "product",
+        "rhythm"
+      ],
+      "summary": "Product images pass between cream/lime surfaces and broaden into recognizable shopping contexts. Subject-specific assets make the argument concrete.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Public motion-portfolio Wistia clip cmov9nlyaw, 20.733 s at 960×540; overview plus dense 3–10.5 s samples.",
+        "observed_beats": [
+          "3–4.5 s: product listing passes through a plane opening",
+          "5 s: shopping items multiply",
+          "10–12 s: marketplace/livestream interfaces"
+        ],
+        "media": [
+          {
+            "media_url": "https://embed-ssl.wistia.com/deliveries/956f6e31d0123e65026e252db190f9efe75e35f5.bin",
+            "bytes": 1994823,
+            "sha256": "603b781139eedb01fdaa35cdc8aed5643e1973fa2171df9c1cc5216236858f51",
+            "duration": 20.733333,
+            "width": 960,
+            "height": 540,
+            "fps": "30/1",
+            "scope": "public 540p project film",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "carry a purchase between contexts",
+        "asset_roles": [
+          "product photography",
+          "commerce UI",
+          "color planes"
+        ],
+        "preserved_property": "Shopping subject and directional/color rhythm.",
+        "original_transfer": "One original order token passes through scan, checkout and dispatch, preserving its anchor and product identity."
+      },
+      "limitations": "Observed marks do not verify partnerships. The UI and campaign assets are not reusable."
+    },
+    {
+      "id": "huncho-ella",
+      "title": "Ella launch — make the workflow problem visible",
+      "source_url": "https://studiohuncho.com/motion",
+      "creator": "Studio Huncho for WizCommerce",
+      "tags": [
+        "narrative",
+        "reconcile",
+        "human",
+        "mixed-media",
+        "workflow"
+      ],
+      "summary": "People, incompatible input formats and deliberately dated interfaces show the burden that the product addresses.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Public Wistia uri9w883xk (internal title Wiz com 3), 91.933 s at 960×540; overview plus dense 18–29 s samples.",
+        "observed_beats": [
+          "18–21 s: face crop becomes an image stack",
+          "22–24 s: physical burden on a worker",
+          "26–29 s: phone, PDF, image and voice-note inputs"
+        ],
+        "media": [
+          {
+            "media_url": "https://embed-ssl.wistia.com/deliveries/e7702e961788e749676a844107cbed9c8f3c6b92.bin",
+            "bytes": 6950268,
+            "sha256": "f886e64dad00066560a55cc19e00308c2657e212af6aa2ab35f3cf522b6f2ebd",
+            "duration": 91.933,
+            "width": 960,
+            "height": 540,
+            "fps": "30/1",
+            "scope": "public 540p project film",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "reconcile conflicting formats",
+        "asset_roles": [
+          "human performance",
+          "documents",
+          "input-format icons",
+          "legacy interfaces"
+        ],
+        "preserved_property": "The same human task through competing representations.",
+        "original_transfer": "Mismatched paper strips reconcile into one usable shipping label; every movement removes visible disorder."
+      },
+      "limitations": "Some footage appears to be entertainment/meme material with unverified provenance. Replace it with authorized original assets."
+    },
+    {
+      "id": "ordinary-folk-dreams",
+      "title": "Procreate Dreams — action carries the viewpoint",
+      "source_url": "https://www.ordinaryfolk.co/project/procreate-dreams",
+      "creator": "Ordinary Folk",
+      "tags": [
+        "character",
+        "illustration",
+        "scale",
+        "occlusion",
+        "narrative"
+      ],
+      "summary": "A designed character, blocks and pencil/ink actions sustain an illustrated world through extreme scale changes. Expressive poses supply the stakes.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Decoded public website preview, 9.667 s at 720×720; project page lists a longer 17 s film. Preview offsets in full film unknown.",
+        "observed_beats": [
+          "0–3.2 s: figure among gathering blocks",
+          "4–6.4 s: pencil/ink action and eye-like opening",
+          "7–9 s: linked outlines and close clothing shapes"
+        ],
+        "media": [
+          {
+            "media_url": "https://ordinaryfolk-assets.pages.dev/video/project/procreate/Procreate_Dreams-transcode.mp4",
+            "bytes": 1061164,
+            "sha256": "b23bc03069d9026490eedb3786a0d244e8784bd9c7d2009bdb911cd87a05d93a",
+            "duration": 9.666667,
+            "width": 720,
+            "height": 720,
+            "fps": "30/1",
+            "scope": "9.667s website preview; full credited film is17s",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "escape constraint through drawing",
+        "asset_roles": [
+          "original character poses",
+          "textured illustration",
+          "pencil/ink states",
+          "angular blocks"
+        ],
+        "preserved_property": "Character action and shared drawing language.",
+        "original_transfer": "A sketched seed pulls a notebook rule into a root and grows beyond the page."
+      },
+      "limitations": "Character design and pose quality are prerequisite assets; abstract primitives alone will not reproduce the effect."
+    },
+    {
+      "id": "ordinary-folk-webflow",
+      "title": "Webflow — layers become a spatial system",
+      "source_url": "https://www.ordinaryfolk.co/project/webflow-a-new-era-of-no-code",
+      "creator": "Ordinary Folk",
+      "tags": [
+        "layer-reveal",
+        "relationships",
+        "spatial",
+        "interface",
+        "assembly"
+      ],
+      "summary": "A browser plane separates into layers and connected nodes, then relates to an architectural arrangement. The rectangle survives the spatial handoff.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Decoded isolated project detail 23, 5.2 s at 640×360; full film is 1:44. Isolated clip offset and full soundtrack timing unknown.",
+        "observed_beats": [
+          "0–1.2 s: plane turns and separates",
+          "1.2–2.8 s: layers, paths and nodes",
+          "around 3.2 s: layered architectural surface"
+        ],
+        "media": [
+          {
+            "media_url": "https://ordinaryfolk-assets.pages.dev/video/project/webflow-a-new-era-of-no-code/23-webflow-a-new-era-of-no-code-transcode.mp4",
+            "bytes": 679322,
+            "sha256": "9bbf5f2b0c43e0a2705acc7f2e5d063f755993afc931d3601a071e924f5856b7",
+            "duration": 5.2,
+            "width": 640,
+            "height": 360,
+            "fps": "30/1",
+            "scope": "5.2s project detail; not full1m44s film",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "reveal a system of layers",
+        "asset_roles": [
+          "purpose-built UI",
+          "translucent panels",
+          "connection paths",
+          "architectural surface"
+        ],
+        "preserved_property": "Rectangular structure and blue/peach material language.",
+        "original_transfer": "A document exposes source evidence, decisions and final output as distinct layers before recombining."
+      },
+      "limitations": "This supports a local transition observation, not claims about the complete film’s narrative."
+    },
+    {
+      "id": "mediawork-office-motion-tests",
+      "title": "Microsoft Office Apps — test the deformation before finish",
+      "source_url": "https://media.work/project/microsoft",
+      "creator": "Media.Work",
+      "tags": [
+        "deformation",
+        "motion-test",
+        "reconcile",
+        "anchor",
+        "interface"
+      ],
+      "summary": "A corner pinches then rounds; disordered printed pieces form a document. Flat and extruded tests expose the mechanism before final material polish.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Decoded R&D clips: corner 3 s, text stack 10 s, interior blocking 3.333 s. These are process tests, not the final film.",
+        "observed_beats": [
+          "Corner test: pointer pulls corner into a pinch, tension releases into rounding",
+          "Text stack 0–5.5 s: pieces move into a legible document"
+        ],
+        "media": [
+          {
+            "media_url": "https://uploads.media.work/2021/11/03_Corners_Pin_VP_v01.mp4",
+            "bytes": 146294,
+            "sha256": "bad60e5151c9a9fbc55f9e71efc5e56c389e08a6fa939becb741c9a98b6cf822",
+            "duration": 3.0,
+            "width": 1970,
+            "height": 1822,
+            "fps": "24/1",
+            "scope": "3s grayscale R&D comparison",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          },
+          {
+            "media_url": "https://uploads.media.work/2021/11/12_Stack_Text_VP_v01.mp4",
+            "bytes": 4011957,
+            "sha256": "232e41203cbe963a9785bdab00ef76458a4093458a0ffc0e83f57787f8f6ba44",
+            "duration": 10.0,
+            "width": 1970,
+            "height": 1822,
+            "fps": "24/1",
+            "scope": "10s grayscale R&D comparison; sampled0-5.5",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          },
+          {
+            "media_url": "https://uploads.media.work/2021/11/01_Interior_anim_2_ID_v17.mp4",
+            "bytes": 344809,
+            "sha256": "bc019085b9af8ee70e891507a68567dcad8535e6297e654d5950618e35d93517",
+            "duration": 3.333333,
+            "width": 1280,
+            "height": 720,
+            "fps": "24/1",
+            "scope": "3.333s scene blocking preview",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "resolve tension into a useful state",
+        "asset_roles": [
+          "anchored editable surface",
+          "pointer",
+          "printed pieces",
+          "blocking geometry"
+        ],
+        "preserved_property": "Anchors and document content while shape/order changes.",
+        "original_transfer": "A cramped schedule opens into a shared workspace; prove it with flat materials before applying final light."
+      },
+      "limitations": "Do not cite process tests as finished production quality."
+    },
+    {
+      "id": "mediawork-pinterest-objects",
+      "title": "Pinterest — construction and softness determine motion",
+      "source_url": "https://media.work/project/pinterest-brand-assets",
+      "creator": "Media.Work",
+      "tags": [
+        "assembly",
+        "hinge",
+        "soft-body",
+        "contact",
+        "product"
+      ],
+      "summary": "Bag flaps close in dependency order; a chair compresses and recovers with its supports. Geometry, attachments and material behavior determine choreography.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "Decoded public bag prototype 5.458 s and rendered chair clip 8.375 s; distinct production stages.",
+        "observed_beats": [
+          "Bag 1.5–4 s: flaps and pockets close into one compact object",
+          "Chair: cushion and supports compress, rebound and settle"
+        ],
+        "media": [
+          {
+            "media_url": "https://uploads.media.work/2024/09/09_Scrap_Bag_01_RE_v07-1.mp4",
+            "bytes": 6167365,
+            "sha256": "84e756c4b806b31a8ce9eaab7f8683fb227bb830d791c954ad1940fe2af2b2cd",
+            "duration": 5.458333,
+            "width": 1920,
+            "height": 1080,
+            "fps": "24/1",
+            "scope": "5.458s colored geometry/prototype preview",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          },
+          {
+            "media_url": "https://uploads.media.work/2024/09/10_Jelly_Chair_01_RE_v03.Cam01.mp4",
+            "bytes": 1406441,
+            "sha256": "5310a86890c8cffbe6b285923c1d7cd2b9bd67f65fb86d282e48c3d743c81d6c",
+            "duration": 8.375,
+            "width": 1920,
+            "height": 1080,
+            "fps": "24/1",
+            "scope": "8.375s rendered material preview",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained public rendition"
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "assemble or absorb load",
+        "asset_roles": [
+          "hinged bag parts",
+          "pockets and closures",
+          "deformable cushion",
+          "contact surface"
+        ],
+        "preserved_property": "Attachments, volume and object function.",
+        "original_transfer": "A compact solar charger unfolds in hinge order, catches light and powers a device."
+      },
+      "limitations": "One spring/wobble preset is inappropriate for both rigid closures and soft cushions."
+    },
+    {
+      "id": "tendril-ibm-sovereign",
+      "title": "IBM Sovereign Core — assembled units become identity",
+      "source_url": "https://tendril.studio/work/ibm-software/",
+      "creator": "Tendril",
+      "tags": [
+        "assembly",
+        "alignment",
+        "identity",
+        "glass",
+        "system"
+      ],
+      "summary": "Blue glass tiles build controlled layers whose horizontal rhythm resolves into a striped mark. Plan the destination before the arrivals.",
+      "kind": "reference",
+      "reuse": "reference-only",
+      "verified_at": "2026-09-14",
+      "evidence": {
+        "method": "Decoded frame sequences; no complete normal-speed audiovisual review",
+        "scope": "First 6 s of embedded clip 08 decoded into a 960-pixel proxy; not the three complete campaign films.",
+        "observed_beats": [
+          "0–3 s: tiles form layers on an engineered platform",
+          "3–4 s: layers resolve into IBM stripes"
+        ],
+        "media": [
+          {
+            "media_url": "https://tendril.studio/wp-content/uploads/2026/06/IBM_SOVEREIGN_CORE_16x9_CLIP_08.mp4",
+            "bytes": 301229,
+            "sha256": "064511d50b1822e67df84c4eb5a536624fffbea08619ec0717a5561e73129e6a",
+            "duration": 6.0,
+            "width": 960,
+            "height": 540,
+            "fps": "30/1",
+            "scope": "First6s of embedded clip08, streamed and transcoded960px;40MB source not saved",
+            "timecode_origin": "local clip start; main-film offset unknown for excerpt/preview files",
+            "hash_scope": "Retained research rendition; Tendril is a locally transcoded first-six-second proxy, not the source file."
+          }
+        ]
+      },
+      "mechanism": {
+        "action": "organize units into identity",
+        "asset_roles": [
+          "glass tiles",
+          "engineered platform",
+          "original destination geometry"
+        ],
+        "preserved_property": "Horizontal units and their material identity.",
+        "original_transfer": "Original channels align into a protected route and a mark designed from those same pieces."
+      },
+      "limitations": "IBM mark and campaign geometry remain reference-only; production settings and internal pipeline undisclosed."
+    }
+  ]
+}
