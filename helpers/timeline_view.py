@@ -188,12 +188,22 @@ def render_timeline(
     out_path: Path,
     n_frames: int,
     transcript: Path | None,
+    review_copy: Path | None = None,
 ) -> None:
+    picture_source, seek_offset = video, 0.0
+    if review_copy is not None:
+        try:
+            from review_copy import load_verified
+        except ImportError:
+            from .review_copy import load_verified
+        saved = load_verified(review_copy, expected_source=video)
+        picture_source = Path(saved["movie"])
+        seek_offset = saved["timing"]["seek_offset_seconds"]
     # Frame extraction
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         print(f"extracting {n_frames} frames from {start:.2f}s to {end:.2f}s")
-        frame_paths = extract_frames(video, start, end, n_frames, tmp_dir)
+        frame_paths = extract_frames(picture_source, start + seek_offset, end + seek_offset, n_frames, tmp_dir)
 
         # Layout metrics
         canvas_width = 1920
@@ -227,7 +237,7 @@ def render_timeline(
         # Header — time range
         draw.text(
             (50, 12),
-            f"{video.name}   {start:.2f}s → {end:.2f}s   ({(end - start):.2f}s, {n_frames} frames)",
+            f"{video.name}{' [review copy]' if review_copy else ''}   {start:.2f}s → {end:.2f}s   ({(end - start):.2f}s, {n_frames} frames)",
             fill=FG,
             font=header_font,
         )
@@ -337,6 +347,7 @@ def main() -> None:
     ap.add_argument("end", type=float, nargs="?", help="End time in seconds")
     ap.add_argument("-o", "--output", type=Path, default=None, help="Output PNG path")
     ap.add_argument("--n-frames", type=int, default=10, help="Number of frames in the filmstrip (default 10)")
+    ap.add_argument("--review-copy", type=Path, help="Use a verified review.json for pictures while retaining original audio and transcript timing")
     ap.add_argument(
         "--transcript",
         type=Path,
@@ -385,6 +396,7 @@ def main() -> None:
         out_path=out_path,
         n_frames=args.n_frames,
         transcript=transcript,
+        review_copy=args.review_copy,
     )
 
 

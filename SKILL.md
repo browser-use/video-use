@@ -71,6 +71,10 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 
 ## Helpers
 
+- **`review_copy.py`, `timeline_view.py --review-copy`** — inspect smaller timed copies while retaining original render sources. See [review copies](references/review-copies.md).
+
+- **`source_scan.py`, `prepare_source.py`, `find_shot.py`, `project_state.py`** — inspect selected sources and retain provenance. `find_shot.py` requires the optional OpenCV install: `uv sync --extra editing` or `pip install -e '.[editing]'`. See [source inspection](references/sources.md).
+
 - **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
