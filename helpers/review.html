@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review</title>
+<script id="review-params" type="application/json">{}</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+      colors: {
+        accent: '#ff6b35',
+        ink: '#0b0a09',
+        panel: '#141311',
+        line: '#2a2725',
+      }
+    }
+  }
+}
+</script>
+<style>
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: #2a2725; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .pin-pop { animation: pop .18s ease-out; }
+  @keyframes pop { from { transform: translate(-50%, -50%) scale(.4); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
+  #timeline:hover .lane { opacity: 1 }
+</style>
+</head>
+<body class="h-screen overflow-hidden bg-ink text-stone-200 font-sans antialiased">
+
+<div class="h-full flex flex-col">
+
+  <!-- Header -->
+  <header class="shrink-0 h-14 px-5 flex items-center gap-4 border-b border-line bg-panel">
+    <div class="flex items-baseline gap-3 min-w-0">
+      <span class="text-[10px] font-extrabold uppercase tracking-[3px] text-accent shrink-0">Review</span>
+      <span id="title" class="text-[15px] font-bold text-stone-100 truncate"></span>
+    </div>
+    <span id="meta" class="text-[11px] font-mono text-stone-500 shrink-0"></span>
+    <div class="ml-auto flex items-center gap-3 shrink-0">
+      <span id="disk-state" class="text-[11px] font-mono text-stone-500 max-w-[320px] truncate"></span>
+      <button id="save-disk"
+        class="px-3 py-1.5 rounded-lg bg-stone-100 text-stone-900 text-[12px] font-bold hover:bg-white transition">Save to disk</button>
+    </div>
+  </header>
+
+  <div id="banner" class="hidden shrink-0 px-5 py-2.5 text-[12px] leading-relaxed bg-amber-400/10 text-amber-200/90 border-b border-amber-400/20"></div>
+
+  <div class="flex-1 min-h-0 flex">
+
+    <!-- Stage -->
+    <main class="flex-1 min-w-0 flex flex-col">
+      <div id="stage" class="relative flex-1 min-h-0 bg-black cursor-crosshair">
+        <video id="video" class="absolute inset-0 w-full h-full" preload="metadata"></video>
+        <div id="pins" class="absolute pointer-events-none"></div>
+
+        <div id="hint"
+          class="absolute left-4 top-4 px-2.5 py-1 rounded-full bg-black/55 backdrop-blur text-[11px] text-stone-300 pointer-events-none transition-opacity">
+          click the frame to point at something
+        </div>
+
+        <!-- Comment editor, floating so the layout never jumps -->
+        <div id="editor"
+          class="hidden absolute left-4 right-4 bottom-4 rounded-2xl border border-line bg-panel/95 backdrop-blur-md shadow-2xl p-4">
+          <div class="flex items-center gap-3 mb-3 flex-wrap">
+            <span id="editor-when" class="font-mono text-[13px] font-bold text-white"></span>
+            <span id="editor-pin" class="hidden font-mono text-[11px] text-accent"></span>
+            <button id="editor-clear-out" class="hidden text-[11px] text-stone-500 hover:text-stone-200 underline underline-offset-2">drop the end</button>
+            <button id="editor-clear-pin" class="hidden text-[11px] text-stone-500 hover:text-stone-200 underline underline-offset-2">drop the point</button>
+            <span class="ml-auto text-[11px] text-stone-600">click the frame to point at something</span>
+          </div>
+          <div id="kinds" class="flex flex-wrap gap-1.5 mb-3"></div>
+          <textarea id="text" rows="2" placeholder="What is wrong with this bit?"
+            class="w-full rounded-xl border border-line bg-black/40 px-3 py-2.5 text-[14px] text-stone-100 placeholder:text-stone-600 resize-none focus:outline-none focus:border-accent"></textarea>
+          <div class="mt-3 flex items-center gap-2 flex-wrap">
+            <button id="save" class="px-4 py-2 rounded-lg bg-accent text-white text-[13px] font-bold hover:brightness-110 transition">Save</button>
+            <button id="cancel" class="px-3 py-2 rounded-lg border border-line text-[13px] font-semibold text-stone-300 hover:bg-white/5 transition">Cancel</button>
+            <button id="record"
+              class="px-3 py-2 rounded-lg border border-line text-[13px] font-semibold text-stone-300 hover:bg-white/5 transition disabled:opacity-35 disabled:cursor-not-allowed inline-flex items-center gap-2">
+              <span id="rec-dot" class="w-2 h-2 rounded-full bg-red-500"></span>Record
+            </button>
+            <span id="rec-state" class="text-[11px] font-mono text-stone-500"></span>
+            <span class="ml-auto text-[11px] text-stone-600"><span class="font-mono text-stone-500">enter</span> saves · <span class="font-mono text-stone-500">esc</span> cancels</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transport -->
+      <div class="shrink-0 border-t border-line bg-panel px-5 pt-3 pb-3.5">
+        <div id="timeline" class="relative h-14 rounded-xl bg-black/50 border border-line cursor-crosshair select-none overflow-hidden">
+          <div id="played" class="absolute left-0 top-0 bottom-0 bg-white/[0.07] pointer-events-none"></div>
+          <div class="lane absolute left-0 right-0 top-1/2 h-px bg-white/10 opacity-60 pointer-events-none transition-opacity"></div>
+          <div id="markers" class="absolute inset-0"></div>
+          <div id="sel" class="hidden absolute top-0 bottom-0 bg-accent/20 border-x border-accent pointer-events-none"></div>
+          <div id="head" class="absolute top-0 bottom-0 w-[2px] bg-white shadow-[0_0_8px_rgba(255,255,255,.6)] pointer-events-none"></div>
+        </div>
+        <div id="tip" class="hidden absolute px-1.5 py-0.5 rounded bg-white text-stone-900 text-[10px] font-mono font-bold pointer-events-none z-30"></div>
+
+        <div class="mt-3 flex items-center gap-4">
+          <button id="play" aria-label="play"
+            class="w-10 h-10 shrink-0 rounded-full bg-accent text-white grid place-items-center hover:brightness-110 transition">
+            <svg id="play-icon" width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
+          </button>
+          <div class="font-mono text-[15px] font-bold tabular-nums text-white shrink-0">
+            <span id="clock">0:00.00</span><span id="of" class="text-stone-600 font-medium"></span>
+          </div>
+          <div class="hidden xl:block text-[11px] text-stone-600 truncate">
+            <span class="font-mono text-stone-500">space</span> play ·
+            <span class="font-mono text-stone-500">c</span> comment here ·
+            <span class="font-mono text-stone-500">i</span>/<span class="font-mono text-stone-500">o</span> range ·
+            <span class="font-mono text-stone-500">&larr;</span>/<span class="font-mono text-stone-500">&rarr;</span> a frame ·
+            <span class="font-mono text-stone-500">&lt;</span>/<span class="font-mono text-stone-500">&gt;</span> speed
+          </div>
+          <div class="ml-auto flex items-center gap-2 shrink-0">
+            <span class="text-[10px] font-extrabold uppercase tracking-[2px] text-stone-600">Speed</span>
+            <select id="speed"
+              class="rounded-lg border border-line bg-black/40 px-2 py-1.5 text-[12px] font-mono text-stone-200 focus:outline-none focus:border-accent"></select>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Notes -->
+    <aside class="w-[370px] shrink-0 border-l border-line bg-panel flex flex-col">
+      <div class="shrink-0 h-11 px-4 flex items-center justify-between border-b border-line">
+        <span class="text-[10px] font-extrabold uppercase tracking-[3px] text-stone-500">Notes</span>
+        <span id="count" class="text-[11px] font-mono text-stone-500">0</span>
+      </div>
+      <div id="notes" class="flex-1 overflow-y-auto p-3 space-y-2"></div>
+      <div id="empty" class="shrink-0 px-4 pb-5 text-[12px] text-stone-600 leading-relaxed">
+        Nothing yet. Play the cut, and when something is off press
+        <span class="font-mono text-stone-500">c</span> to stop and say so,
+        or click straight on the frame to point at it.
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const params = JSON.parse(document.getElementById("review-params").textContent);
+  const KINDS = ["cut", "shorten", "lengthen", "wrong", "note"];
+  const KIND_COLOR = {
+    cut: "#ff5c4d", shorten: "#f0b429", lengthen: "#4d9dff",
+    wrong: "#ff6b35", note: "#a8a29e",
+  };
+  const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  const NOTES_KEY = "video-use-review:" + (params.stem || "review");
+  const SPEED_KEY = "video-use-review-speed";
+
+  // Same rule as helpers/review.py: a rate is a string, "24" or "30000/1001".
+  function fpsToFloat(text) {
+    const parts = String(text || "").split("/");
+    const num = parseFloat(parts[0]);
+    const den = parts.length > 1 ? parseFloat(parts[1]) : 1;
+    if (!(num > 0) || !(den > 0)) return 25;
+    return num / den;
+  }
+  const FPS = fpsToFloat(params.fps);
+
+  // Mirrors time_to_frame() in helpers/review.py. A note that says "cut" has to
+  // become a cut later, and that needs a frame, not a float.
+  function timeToFrame(t) { return Math.max(0, Math.round(t * FPS)); }
+
+  function timecode(t) {
+    t = Math.max(0, t || 0);
+    let m = Math.floor(t / 60);
+    const rest = t - m * 60;
+    let s = Math.floor(rest);
+    let f = Math.round((rest - s) * FPS);
+    if (f >= Math.round(FPS)) { f = 0; s += 1; if (s >= 60) { s = 0; m += 1; } }
+    return m + ":" + String(s).padStart(2, "0") + "." + String(f).padStart(2, "0");
+  }
+
+  function stamp() {
+    const d = new Date(), p = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+           "T" + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const round4 = (n) => Math.round(n * 10000) / 10000;
+  const video = $("video"), stage = $("stage"), timeline = $("timeline"), editor = $("editor");
+
+  let notes = [];
+  let draft = null;          // {t_in, t_out, x, y} while the editor is open
+  let draftKind = "note";
+  let editing = null;        // id being edited, or null for a new note
+  let selected = null;
+  let pendingIn = null;      // set by the "i" key
+
+  function duration() {
+    return (isFinite(video.duration) && video.duration > 0)
+      ? video.duration : (params.duration || 0);
+  }
+
+  function say(message) {
+    $("banner").textContent = message;
+    $("banner").classList.remove("hidden");
+  }
+
+  // ---- storage -----------------------------------------------------------
+  function persist() {
+    try {
+      localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+    } catch (err) {
+      say("This browser will not keep the notes between reloads: " + err.message);
+    }
+    autosave();
+  }
+
+  function restore() {
+    try {
+      const raw = localStorage.getItem(NOTES_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) notes = parsed.filter((n) => n && typeof n.t_in === "number");
+    } catch (err) {
+      notes = [];
+    }
+  }
+
+  // ---- playback speed ----------------------------------------------------
+  function readSpeed() {
+    // A value that is not on the list would otherwise come back every time the
+    // page opens, and there is nothing on screen that would explain it.
+    const stored = Number(localStorage.getItem(SPEED_KEY));
+    return SPEEDS.indexOf(stored) === -1 ? 1 : stored;
+  }
+
+  function setSpeed(value) {
+    const rate = SPEEDS.indexOf(value) === -1 ? 1 : value;
+    video.playbackRate = rate;
+    $("speed").value = String(rate);
+    try { localStorage.setItem(SPEED_KEY, String(rate)); } catch (err) { /* private window */ }
+  }
+
+  function stepSpeed(direction) {
+    const at = SPEEDS.indexOf(Number($("speed").value));
+    const next = Math.min(SPEEDS.length - 1, Math.max(0, (at === -1 ? 2 : at) + direction));
+    setSpeed(SPEEDS[next]);
+  }
+
+  // ---- the picture inside the player -------------------------------------
+  // The video is letterboxed inside its box, and a point on the frame has to
+  // stay on the same pixel of the picture whatever the window does. So the
+  // coordinates are fractions of the picture, never of the element.
+  function contentBox() {
+    const box = video.getBoundingClientRect();
+    const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+    const scale = Math.min(box.width / vw, box.height / vh);
+    const w = vw * scale, h = vh * scale;
+    return { left: box.left + (box.width - w) / 2, top: box.top + (box.height - h) / 2,
+             width: w, height: h };
+  }
+
+  function layoutPins() {
+    const outer = stage.getBoundingClientRect(), inner = contentBox();
+    const el = $("pins");
+    el.style.left = (inner.left - outer.left) + "px";
+    el.style.top = (inner.top - outer.top) + "px";
+    el.style.width = inner.width + "px";
+    el.style.height = inner.height + "px";
+  }
+
+  function ordinals() {
+    const map = {};
+    notes.slice().sort((a, b) => a.t_in - b.t_in).forEach((n, i) => { map[n.id] = i + 1; });
+    return map;
+  }
+
+  function pinVisible(note, t) {
+    if (note.x === null || note.x === undefined) return false;
+    if (note.id === selected) return true;
+    const end = (note.t_out === null || note.t_out === undefined) ? note.t_in : note.t_out;
+    return t >= note.t_in - 0.4 && t <= end + 0.4;
+  }
+
+  function drawPins() {
+    layoutPins();
+    const host = $("pins");
+    host.innerHTML = "";
+    const order = ordinals();
+    const t = video.currentTime;
+
+    notes.filter((n) => pinVisible(n, t)).forEach((note) => {
+      const pin = document.createElement("button");
+      pin.className = "pin-pop absolute w-7 h-7 rounded-full text-[11px] font-bold text-white " +
+        "grid place-items-center pointer-events-auto shadow-lg ring-2 ring-white/70";
+      pin.style.left = (note.x * 100) + "%";
+      pin.style.top = (note.y * 100) + "%";
+      pin.style.transform = "translate(-50%, -50%)";
+      pin.style.background = KIND_COLOR[note.kind] || KIND_COLOR.note;
+      pin.title = note.kind + (note.text ? ": " + note.text : "");
+      pin.textContent = String(order[note.id] || "");
+      pin.addEventListener("click", (event) => {
+        event.stopPropagation();
+        seek(note.t_in);
+        select(note.id);
+      });
+      host.appendChild(pin);
+    });
+
+    if (draft && draft.x !== null && draft.x !== undefined) {
+      const ghost = document.createElement("div");
+      ghost.className = "pin-pop absolute w-7 h-7 rounded-full ring-2 ring-white animate-pulse";
+      ghost.style.left = (draft.x * 100) + "%";
+      ghost.style.top = (draft.y * 100) + "%";
+      ghost.style.transform = "translate(-50%, -50%)";
+      ghost.style.background = KIND_COLOR[draftKind] || KIND_COLOR.note;
+      host.appendChild(ghost);
+    }
+  }
+
+  // ---- the timeline ------------------------------------------------------
+  function drawMarkers() {
+    const host = $("markers");
+    host.innerHTML = "";
+    const total = duration() || 1;
+    const order = ordinals();
+    notes.forEach((note) => {
+      const mark = document.createElement("div");
+      mark.dataset.marker = String(note.id);
+      const wide = (note.t_out !== null && note.t_out !== undefined)
+        ? Math.max(0.3, ((note.t_out - note.t_in) / total) * 100) : null;
+      mark.className = "absolute cursor-pointer rounded-sm transition-all " +
+        (note.id === selected ? "ring-2 ring-white z-20" : "hover:brightness-125");
+      mark.style.left = ((note.t_in / total) * 100) + "%";
+      mark.style.top = "6px";
+      mark.style.bottom = "6px";
+      mark.style.width = wide !== null ? wide + "%" : "3px";
+      mark.style.background = KIND_COLOR[note.kind] || KIND_COLOR.note;
+      mark.style.opacity = wide !== null ? "0.55" : "0.95";
+      mark.title = "#" + (order[note.id] || "") + "  " + timecode(note.t_in) + "  " +
+                   note.kind + (note.text ? "  " + note.text : "");
+      mark.addEventListener("mousedown", (event) => {
+        event.stopPropagation();
+        seek(note.t_in);
+        select(note.id);
+      });
+      host.appendChild(mark);
+    });
+    moveHead();
+  }
+
+  function moveHead() {
+    const ratio = (video.currentTime / (duration() || 1)) * 100;
+    $("head").style.left = ratio + "%";
+    $("played").style.width = ratio + "%";
+  }
+
+  function timeAt(event) {
+    const box = timeline.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+    return ratio * (duration() || 0);
+  }
+
+  function seek(t) {
+    video.currentTime = Math.min(Math.max(0, t), Math.max(0, duration() - 0.001));
+    moveHead();
+    $("clock").textContent = timecode(video.currentTime);
+    drawPins();
+  }
+
+  // ---- the notes list ----------------------------------------------------
+  function select(id) {
+    selected = id;
+    render();
+  }
+
+  function pill(kind) {
+    const el = document.createElement("span");
+    el.className = "px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[1px] text-black/80";
+    el.style.background = KIND_COLOR[kind] || KIND_COLOR.note;
+    el.textContent = kind;
+    return el;
+  }
+
+  function render() {
+    const sorted = notes.slice().sort((a, b) => a.t_in - b.t_in);
+    $("count").textContent = String(sorted.length);
+    $("empty").classList.toggle("hidden", sorted.length > 0);
+
+    const list = $("notes");
+    list.innerHTML = "";
+    sorted.forEach((note, index) => {
+      const row = document.createElement("div");
+      row.className = "group rounded-xl border p-3 cursor-pointer transition " +
+        (note.id === selected
+          ? "border-accent bg-accent/[0.07]"
+          : "border-line bg-black/20 hover:border-stone-600");
+
+      const head = document.createElement("div");
+      head.className = "flex items-center gap-2 mb-1.5";
+
+      const num = document.createElement("span");
+      num.className = "w-5 h-5 shrink-0 rounded-full grid place-items-center text-[10px] font-bold text-black/80";
+      num.style.background = KIND_COLOR[note.kind] || KIND_COLOR.note;
+      num.textContent = String(index + 1);
+
+      const when = document.createElement("span");
+      when.className = "font-mono text-[12px] font-bold text-stone-100";
+      when.textContent = timecode(note.t_in) +
+        ((note.t_out !== null && note.t_out !== undefined) ? " - " + timecode(note.t_out) : "");
+
+      head.append(num, when, pill(note.kind));
+
+      if (note.x !== null && note.x !== undefined) {
+        const marker = document.createElement("span");
+        marker.className = "text-[10px] font-mono text-stone-500";
+        marker.textContent = "on frame";
+        marker.title = Math.round(note.x * 100) + "%, " + Math.round(note.y * 100) + "% of the picture";
+        head.appendChild(marker);
+      }
+      if (note.voice) {
+        const voice = document.createElement("span");
+        voice.className = "text-[10px] font-mono text-accent";
+        voice.textContent = "voice";
+        head.appendChild(voice);
+      }
+
+      const tools = document.createElement("span");
+      tools.className = "ml-auto flex items-center gap-2 opacity-0 group-hover:opacity-100 transition";
+      const edit = document.createElement("button");
+      edit.className = "text-[10px] text-stone-400 hover:text-white";
+      edit.textContent = "edit";
+      edit.addEventListener("click", (event) => {
+        event.stopPropagation();
+        seek(note.t_in);
+        openEditor(note.t_in, note.t_out, note);
+      });
+      const remove = document.createElement("button");
+      remove.className = "text-[10px] text-stone-500 hover:text-red-400";
+      remove.textContent = "delete";
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        notes = notes.filter((other) => other.id !== note.id);
+        if (selected === note.id) selected = null;
+        persist(); render();
+      });
+      tools.append(edit, remove);
+      head.appendChild(tools);
+
+      const body = document.createElement("div");
+      body.className = "text-[13px] leading-snug text-stone-300 whitespace-pre-wrap";
+      body.textContent = (note.text || "").trim() ||
+        (note.voice ? "(voice note, transcribed by review.py --dump)" : "(no text)");
+
+      row.append(head, body);
+      row.addEventListener("click", () => { seek(note.t_in); select(note.id); });
+      list.appendChild(row);
+    });
+    drawMarkers();
+    drawPins();
+  }
+
+  // ---- the editor --------------------------------------------------------
+  function drawKinds() {
+    const box = $("kinds");
+    box.innerHTML = "";
+    KINDS.forEach((kind) => {
+      const button = document.createElement("button");
+      const on = kind === draftKind;
+      button.className = "px-3 py-1.5 rounded-lg text-[12px] font-bold border transition " +
+        (on ? "text-black/85 border-transparent" : "bg-black/30 text-stone-400 border-line hover:text-stone-100");
+      if (on) button.style.background = KIND_COLOR[kind];
+      button.textContent = kind;
+      button.addEventListener("click", () => { draftKind = kind; drawKinds(); drawPins(); });
+      box.appendChild(button);
+    });
+  }
+
+  function editorHeader() {
+    if (!draft) return;
+    $("editor-when").textContent = timecode(draft.t_in) +
+      (draft.t_out !== null && draft.t_out !== undefined ? " - " + timecode(draft.t_out) : "");
+    const pinned = draft.x !== null && draft.x !== undefined;
+    $("editor-pin").textContent = pinned
+      ? "pointing at " + Math.round(draft.x * 100) + "%, " + Math.round(draft.y * 100) + "%" : "";
+    $("editor-pin").classList.toggle("hidden", !pinned);
+    $("editor-clear-pin").classList.toggle("hidden", !pinned);
+    $("editor-clear-out").classList.toggle("hidden",
+      draft.t_out === null || draft.t_out === undefined);
+  }
+
+  // The editor floats over the picture, so it must not sit on top of the very
+  // thing the note is pointing at. Lower thirds are exactly where captions and
+  // logos live, so a point down there pushes the panel to the top instead.
+  function placeEditor() {
+    const low = draft && draft.y !== null && draft.y !== undefined && draft.y > 0.52;
+    editor.classList.toggle("bottom-4", !low);
+    editor.classList.toggle("top-4", low);
+  }
+
+  function openEditor(t_in, t_out, note, point) {
+    if (!video.paused) video.pause();
+    editing = note ? note.id : null;
+    draft = {
+      t_in: t_in,
+      t_out: (t_out === undefined ? null : t_out),
+      x: point ? point.x : (note && note.x !== undefined ? note.x : null),
+      y: point ? point.y : (note && note.y !== undefined ? note.y : null),
+    };
+    draftKind = note ? note.kind : (point ? "note" : "note");
+    $("text").value = note ? (note.text || "") : "";
+    editor.classList.remove("hidden");
+    $("hint").style.opacity = "0";
+    drawKinds();
+    editorHeader();
+    placeEditor();
+    drawPins();
+    $("text").focus();
+    updatePlayButton();
+  }
+
+  function closeEditor() {
+    if (recorder && recorder.state === "recording") recorder.stop();
+    draftVoice = null;
+    recState("");
+    $("record").lastChild.textContent = "Record";
+    editor.classList.add("hidden");
+    editor.classList.add("bottom-4");
+    editor.classList.remove("top-4");
+    $("hint").style.opacity = "1";
+    draft = null;
+    editing = null;
+    pendingIn = null;
+    $("sel").classList.add("hidden");
+    drawPins();
+  }
+
+  async function saveDraft() {
+    if (!draft) return;
+    const existing = editing !== null ? notes.find((n) => n.id === editing) : null;
+    const note = existing || {
+      id: notes.reduce((top, n) => Math.max(top, n.id), 0) + 1,
+      voice: null, voice_text: null, created: stamp(),
+    };
+    note.t_in = draft.t_in;
+    note.t_out = (draft.t_out === undefined) ? null : draft.t_out;
+    note.frame_in = timeToFrame(note.t_in);
+    note.frame_out = note.t_out === null ? null : timeToFrame(note.t_out);
+    note.x = (draft.x === undefined) ? null : draft.x;
+    note.y = (draft.y === undefined) ? null : draft.y;
+    note.kind = draftKind;
+    note.text = $("text").value.trim();
+    if (draftVoice) {
+      try {
+        note.voice = await storeVoice();
+        note.voice_text = null;   // review.py --dump fills this in
+      } catch (err) {
+        say("The voice note could not be written: " + err.message);
+      }
+    }
+    if (!existing) notes.push(note);
+    selected = note.id;
+    persist();
+    closeEditor();
+    render();
+  }
+
+  // ---- disk --------------------------------------------------------------
+  // The page writes the notes itself once the user has pointed at a folder,
+  // which Chrome remembers through a handle kept in IndexedDB. Everywhere else
+  // Save turns into a download and says so.
+  const CAN_PICK = typeof window.showDirectoryPicker === "function";
+  const HANDLE_KEY = params.stem || "review";
+  let dirHandle = null;
+
+  function idb() {
+    return new Promise(function (resolve, reject) {
+      const request = indexedDB.open("video-use-review", 1);
+      request.onupgradeneeded = function () { request.result.createObjectStore("handles"); };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { reject(request.error); };
+    });
+  }
+
+  function idbDo(mode, run) {
+    return idb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const store = db.transaction("handles", mode).objectStore("handles");
+        const request = run(store);
+        request.onsuccess = function () { resolve(request.result); };
+        request.onerror = function () { reject(request.error); };
+      });
+    });
+  }
+
+  function diskState(message) { $("disk-state").textContent = message; }
+  function recState(message) { $("rec-state").textContent = message; }
+
+  function notesFileName() { return (params.stem || "review") + ".review.json"; }
+
+  function videoFileName() {
+    const last = String(params.video || "").split("/").pop();
+    try { return decodeURIComponent(last); } catch (err) { return last; }
+  }
+
+  // Exactly the shape helpers/review.py reads back. "video" is the file name,
+  // not the path the page uses, so the notes stay readable if they are moved.
+  function payload() {
+    return {
+      video: videoFileName(),
+      fps: params.fps,
+      duration: params.duration,
+      notes: notes.slice().sort(function (a, b) { return a.t_in - b.t_in; }),
+    };
+  }
+
+  async function allowed(handle, interactive) {
+    const options = { mode: "readwrite" };
+    if ((await handle.queryPermission(options)) === "granted") return true;
+    if (!interactive) return false;
+    return (await handle.requestPermission(options)) === "granted";
+  }
+
+  async function ensureDir(interactive) {
+    if (dirHandle && await allowed(dirHandle, interactive)) return dirHandle;
+    dirHandle = null;
+    if (!interactive || !CAN_PICK) return null;
+    dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    try { await idbDo("readwrite", function (s) { return s.put(dirHandle, HANDLE_KEY); }); }
+    catch (err) { /* the folder still works for this session */ }
+    return dirHandle;
+  }
+
+  async function writeFile(handle, name, data) {
+    const file = await handle.getFileHandle(name, { create: true });
+    const stream = await file.createWritable();
+    await stream.write(data);
+    await stream.close();
+  }
+
+  function download() {
+    const blob = new Blob([JSON.stringify(payload(), null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = notesFileName();
+    link.click();
+    setTimeout(function () { URL.revokeObjectURL(link.href); }, 2000);
+    diskState("downloaded, put it in review/ next to the video");
+  }
+
+  async function saveToDisk(interactive) {
+    if (!CAN_PICK) { if (interactive) download(); return false; }
+    let dir;
+    try { dir = await ensureDir(interactive); }
+    catch (err) { if (interactive) diskState("no folder chosen"); return false; }
+    if (!dir) {
+      diskState(interactive ? "no folder chosen" : "in this browser only, press Save to disk");
+      return false;
+    }
+    try {
+      await writeFile(dir, notesFileName(), JSON.stringify(payload(), null, 2));
+      diskState("saved " + notesFileName() + " at " + new Date().toTimeString().slice(0, 8));
+      return true;
+    } catch (err) {
+      diskState("could not write: " + err.message);
+      return false;
+    }
+  }
+
+  function autosave() {
+    // Silent once the folder is known: the first Save is the only interruption.
+    if (dirHandle) saveToDisk(false).catch(function () { /* reported on screen */ });
+  }
+
+  async function adoptDisk() {
+    if (!CAN_PICK) return;
+    let handle = null;
+    try { handle = await idbDo("readonly", function (s) { return s.get(HANDLE_KEY); }); }
+    catch (err) { return; }
+    if (!handle) { diskState("not on disk yet"); return; }
+    dirHandle = handle;
+    if (!(await allowed(handle, false))) {
+      diskState("folder known, press Save to disk to let the page back in");
+      return;
+    }
+    try {
+      const file = await (await handle.getFileHandle(notesFileName())).getFile();
+      const data = JSON.parse(await file.text());
+      if (!data || !Array.isArray(data.notes)) return;
+      if (data.notes.length !== notes.length) {
+        say("The folder holds " + data.notes.length + " notes and this browser " +
+            notes.length + ". Keeping whichever has more.");
+      }
+      if (data.notes.length > notes.length) {
+        notes = data.notes;
+        try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); } catch (err) { /* private window */ }
+        render();
+      }
+      diskState("reading from the folder you chose");
+    } catch (err) {
+      diskState("folder ready, nothing written yet");
+    }
+  }
+
+  // ---- voice ---------------------------------------------------------------
+  const CAN_RECORD = !!(window.MediaRecorder && navigator.mediaDevices &&
+                        navigator.mediaDevices.getUserMedia);
+  let recorder = null;
+  let chunks = [];
+  let draftVoice = null;
+
+  function voiceType() {
+    const wanted = "audio/webm;codecs=opus";
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return wanted;
+    if (MediaRecorder.isTypeSupported(wanted)) return wanted;
+    return MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+  }
+
+  async function storeVoice() {
+    const dir = await ensureDir(true);
+    if (!dir) throw new Error("no folder to write into");
+    const voiceDir = await dir.getDirectoryHandle("voice", { create: true });
+    const used = notes
+      .map(function (n) { return n.voice; })
+      .filter(Boolean)
+      .map(function (path) { return parseInt(String(path).split("/").pop(), 10); })
+      .filter(function (n) { return !isNaN(n); });
+    const next = (used.length ? Math.max.apply(null, used) : 0) + 1;
+    const name = String(next).padStart(3, "0") + ".webm";
+    await writeFile(voiceDir, name, draftVoice);
+    return "voice/" + name;
+  }
+
+  async function toggleRecord() {
+    if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+    let dir = null;
+    try { dir = await ensureDir(true); } catch (err) { dir = null; }
+    if (!dir) { recState("a voice note needs a folder to live in"); return; }
+
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (err) { recState("microphone refused (" + err.name + ")"); return; }
+
+    chunks = [];
+    const type = voiceType();
+    recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+    const started = Date.now();
+    recorder.ondataavailable = function (event) { if (event.data.size) chunks.push(event.data); };
+    recorder.onstop = function () {
+      // Drop the microphone at once, so the tab stops claiming it.
+      stream.getTracks().forEach(function (track) { track.stop(); });
+      draftVoice = new Blob(chunks, { type: type || "audio/webm" });
+      $("rec-dot").classList.remove("animate-ping");
+      $("record").lastChild.textContent = "Record again";
+      recState("recorded " + Math.round((Date.now() - started) / 1000) + "s, saved with the note");
+    };
+    recorder.start();
+    $("rec-dot").classList.add("animate-ping");
+    $("record").lastChild.textContent = "Stop";
+    recState("recording");
+  }
+
+  // ---- wiring ------------------------------------------------------------
+  const PLAY_PATH = "M4 2.5v11l9-5.5z";
+  const PAUSE_PATH = "M4 2.5h3v11H4zM9 2.5h3v11H9z";
+
+  function updatePlayButton() {
+    $("play-icon").firstElementChild.setAttribute("d", video.paused ? PLAY_PATH : PAUSE_PATH);
+  }
+
+  function togglePlay() {
+    if (video.paused) video.play(); else video.pause();
+  }
+
+  video.src = params.video;
+  $("title").textContent = params.stem || "review";
+  // "24/1" is the canonical rate, and it is what goes in the notes file. On
+  // screen it reads better as a number, with the exact ratio kept in reach.
+  $("meta").textContent = Number.isInteger(FPS)
+    ? FPS + " fps" : FPS.toFixed(3) + " fps (" + params.fps + ")";
+
+  const speedBox = $("speed");
+  SPEEDS.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = String(value);
+    option.textContent = value + "x";
+    speedBox.appendChild(option);
+  });
+  speedBox.addEventListener("change", () => setSpeed(Number(speedBox.value)));
+
+  video.addEventListener("loadedmetadata", () => {
+    $("of").textContent = " / " + timecode(duration());
+    setSpeed(readSpeed());
+    render();
+  });
+  video.addEventListener("error", () => {
+    say("The video did not load from " + params.video +
+        ". The page has to sit next to the file it was generated for.");
+  });
+  video.addEventListener("timeupdate", () => {
+    $("clock").textContent = timecode(video.currentTime);
+    moveHead();
+    drawPins();
+  });
+  video.addEventListener("play", updatePlayButton);
+  video.addEventListener("pause", updatePlayButton);
+  $("play").addEventListener("click", togglePlay);
+  window.addEventListener("resize", () => { drawPins(); });
+
+  // A click on the picture points at something. Play and pause stay on the
+  // space bar and the button, so pointing never costs a stray pause.
+  stage.addEventListener("click", (event) => {
+    if (event.target.closest("#editor")) return;
+    if (event.target.closest("#pins button")) return;
+    const box = contentBox();
+    const x = (event.clientX - box.left) / box.width;
+    const y = (event.clientY - box.top) / box.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;   // the letterbox is not the picture
+    if (draft) {
+      draft.x = round4(x);
+      draft.y = round4(y);
+      editorHeader();
+      placeEditor();
+      drawPins();
+      return;
+    }
+    video.pause();
+    openEditor(video.currentTime, null, null, { x: round4(x), y: round4(y) });
+  });
+
+  // Click seeks, drag opens a range.
+  let dragFrom = null;
+  timeline.addEventListener("mousedown", (event) => {
+    dragFrom = { x: event.clientX, t: timeAt(event) };
+  });
+  timeline.addEventListener("mousemove", (event) => {
+    const tip = $("tip"), box = timeline.getBoundingClientRect();
+    tip.textContent = timecode(timeAt(event));
+    tip.style.left = event.clientX + "px";
+    tip.style.top = (box.top - 22) + "px";
+    tip.classList.remove("hidden");
+  });
+  timeline.addEventListener("mouseleave", () => $("tip").classList.add("hidden"));
+  window.addEventListener("mousemove", (event) => {
+    if (dragFrom === null) return;
+    if (Math.abs(event.clientX - dragFrom.x) < 4) return;
+    const box = timeline.getBoundingClientRect();
+    const a = Math.min(dragFrom.x, event.clientX), b = Math.max(dragFrom.x, event.clientX);
+    const sel = $("sel");
+    sel.style.left = (Math.max(box.left, a) - box.left) + "px";
+    sel.style.width = (Math.min(box.right, b) - Math.max(box.left, a)) + "px";
+    sel.classList.remove("hidden");
+  });
+  window.addEventListener("mouseup", (event) => {
+    if (dragFrom === null) return;
+    const moved = Math.abs(event.clientX - dragFrom.x) >= 4;
+    const from = dragFrom;
+    dragFrom = null;
+    if (!moved) {
+      $("sel").classList.add("hidden");
+      seek(from.t);
+      return;
+    }
+    const to = timeAt(event);
+    seek(Math.min(from.t, to));
+    openEditor(Math.min(from.t, to), Math.max(from.t, to));
+  });
+
+  $("save").addEventListener("click", saveDraft);
+  $("cancel").addEventListener("click", closeEditor);
+  $("save-disk").addEventListener("click", function () { saveToDisk(true); });
+  $("record").addEventListener("click", toggleRecord);
+  $("editor-clear-out").addEventListener("click", () => {
+    if (!draft) return;
+    draft.t_out = null;
+    editorHeader();
+  });
+  $("editor-clear-pin").addEventListener("click", () => {
+    if (!draft) return;
+    draft.x = null;
+    draft.y = null;
+    editorHeader();
+    placeEditor();
+    drawPins();
+  });
+  $("text").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); saveDraft(); }
+    if (event.key === "Escape") { event.preventDefault(); closeEditor(); }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const tag = (event.target.tagName || "").toLowerCase();
+    if (tag === "textarea" || tag === "input" || tag === "select") return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const frame = 1 / FPS;
+
+    switch (event.key) {
+      case " ": event.preventDefault(); togglePlay(); break;
+      // Pausing is the point. At 1.5x the instant you reacted to is already
+      // behind the playhead, and a comment on a moving target lands late.
+      case "c": event.preventDefault(); video.pause(); openEditor(video.currentTime, null); break;
+      case "i": event.preventDefault(); pendingIn = video.currentTime; flashIn(); break;
+      case "o":
+        event.preventDefault();
+        if (pendingIn === null) { say("Press i first to mark where the range starts."); break; }
+        openEditor(Math.min(pendingIn, video.currentTime), Math.max(pendingIn, video.currentTime));
+        break;
+      case "ArrowLeft": event.preventDefault(); seek(video.currentTime - (event.shiftKey ? 1 : frame)); break;
+      case "ArrowRight": event.preventDefault(); seek(video.currentTime + (event.shiftKey ? 1 : frame)); break;
+      case "<": case ",": event.preventDefault(); stepSpeed(-1); break;
+      case ">": case ".": event.preventDefault(); stepSpeed(1); break;
+      case "0": event.preventDefault(); setSpeed(1); break;
+      case "Escape": closeEditor(); break;
+      default: break;
+    }
+  });
+
+  function flashIn() {
+    const box = timeline.getBoundingClientRect();
+    const sel = $("sel");
+    sel.style.left = ((pendingIn / (duration() || 1)) * box.width) + "px";
+    sel.style.width = "2px";
+    sel.classList.remove("hidden");
+  }
+
+  if (!CAN_PICK) {
+    $("save-disk").textContent = "Download notes";
+    say("This browser cannot write files directly, so Save downloads the notes " +
+        "instead: drop the file in the review folder next to the video. " +
+        "Chrome or Edge gives you one-click saving, and voice notes.");
+    $("record").disabled = true;
+    $("record").title = "Voice notes need a browser that can write to a folder: Chrome or Edge.";
+  } else if (!CAN_RECORD) {
+    $("record").disabled = true;
+    $("record").title = "This browser has no MediaRecorder, so it cannot capture audio.";
+  }
+
+  if (!window.isSecureContext) {
+    say("This page is not a secure context, so the browser will withhold the " +
+        "microphone. Everything else still works.");
+  }
+
+  restore();
+  render();
+  setSpeed(readSpeed());
+  updatePlayButton();
+  adoptDisk();
+})();
+</script>
+</body>
+</html>
