@@ -127,7 +127,7 @@ def _sample_frame_stats(
             except (ValueError, IndexError):
                 return None
 
-        with open(metadata_path) as f:
+        with open(metadata_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if "lavfi.signalstats.YBITDEPTH" in line:

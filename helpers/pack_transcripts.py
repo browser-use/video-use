@@ -124,7 +124,7 @@ def group_into_phrases(
 
 def pack_one_file(json_path: Path, silence_threshold: float) -> tuple[str, float, list[dict]]:
     """Return (header_name, duration, phrases) for one transcript file."""
-    data = json.loads(json_path.read_text())
+    data = json.loads(json_path.read_text(encoding="utf-8"))
     words = data.get("words", [])
     phrases = group_into_phrases(words, silence_threshold)
     if phrases:
