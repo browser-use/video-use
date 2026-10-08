@@ -10,10 +10,13 @@ dependencies = [
     "matplotlib",
     "pillow",
     "numpy",
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]
+test = ["pytest>=7"]
 animations = ["manim"]
+editing = ["opencv-python-headless>=4.10,<5"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -21,3 +24,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = []
+
+[tool.pytest.ini_options]
+pythonpath = [".", "helpers"]
+testpaths = ["tests"]
