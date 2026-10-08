@@ -1,0 +1,7 @@
+{
+  "name": "video-use-motion-slot",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": { "hyperframes": "0.8.30", "gsap": "3.15.0" },
+  "scripts": { "check": "hyperframes check .", "render": "hyperframes render . --no-best-effort --strict" }
+}

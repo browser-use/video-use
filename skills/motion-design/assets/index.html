@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><title>Motion study</title>
+  <link rel="stylesheet" href="motion-kit.css">
+  <script src="node_modules/gsap/dist/gsap.min.js"></script>
+  <script src="motion-kit.js"></script>
+  <style>
+    * { box-sizing:border-box } html,body { margin:0; width:100%; height:100%; overflow:hidden }
+    #root { position:relative; width:__WIDTH__px; height:__HEIGHT__px; background:#101319; color:#f5f4ef; overflow:hidden; font-family:Arial,sans-serif }
+    #world { position:absolute; inset:0; transform-origin:0 0 }
+    #headline { position:absolute; left:10%; top:12%; margin:0; font-size:__TITLE_SIZE__px; letter-spacing:-.045em; max-width:80% }
+    #terminal { position:absolute; left:15%; top:38% }
+    #status { position:absolute; left:10%; bottom:9%; margin:0; font-size:__BODY_SIZE__px; color:#a6c5ac }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="motion" data-start="0" data-duration="__DURATION__" data-width="__WIDTH__" data-height="__HEIGHT__" data-fps="__FPS__">
+    <div id="world">
+      <h1 id="headline">Make the next move.</h1>
+      <div id="terminal"></div>
+      <p id="status">An editable motion study.</p>
+    </div>
+  </div>
+  <script>
+    // This smoke composition demonstrates primitives, not a mandatory creative template.
+    const M = MotionKit, tl = gsap.timeline({paused:true});
+    const D = __DURATION__, W = __WIDTH__, H = __HEIGHT__;
+    const panel = M.terminal({title:'Local workspace',width:W*.70,height:H*.36,
+      lines:['$ build something useful','✓ Ready for your next idea']});
+    panel.rows.forEach(row=>row.style.fontSize=`${Math.max(12,W*.019)}px`);
+    document.querySelector('#terminal').append(panel.root);
+    M.revealText(tl,document.querySelector('#headline'),{at:0,duration:Math.min(.65,D*.1),stagger:.06});
+    tl.fromTo(panel.root,{opacity:0,y:40,scale:.96},{opacity:1,y:0,scale:1,duration:D*.15,ease:'power3.out'},D*.12);
+    M.typeText(tl,panel.rows[0],{at:D*.27,duration:D*.24});
+    M.revealText(tl,panel.rows[1],{at:D*.57,duration:D*.09,stagger:.04,y:10,blur:3});
+    M.revealText(tl,document.querySelector('#status'),{at:D*.70,duration:D*.08,stagger:.035});
+    M.register('motion',tl,D);
+    // Keep registration visible to HyperFrames' static HTML linter as well.
+    window.__timelines = window.__timelines || {};
+    window.__timelines['motion'] = tl;
+  </script>
+</body>
+</html>
