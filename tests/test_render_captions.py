@@ -1,3 +1,4 @@
+"""Check phrase aware caption timing and required subtitle paths."""
 import importlib.util
 import json
 import os
@@ -13,6 +14,7 @@ render = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(render)
 
 
+# w
 def w(text, start, end):
     return {"type": "word", "text": text, "start": start, "end": end}
 
@@ -26,40 +28,50 @@ TAKE = [
 ]
 
 
+# texts
 def texts(chunks):
     return [" ".join(x["text"] for x in c) for c in chunks]
 
 
+# chunk words tests
 class ChunkWordsTests(unittest.TestCase):
+    # test real take
     def test_real_take(self):
         self.assertEqual(
             texts(render.chunk_words(TAKE)),
             ["90% of", "what a web", "agent does", "is completely", "wasted.", "We fix this."],
         )
 
+    # test pause splits across words
     def test_pause_splits_across_words(self):
         # the old fixed pairs produced "does is" across a 0.34 s pause
         chunks = texts(render.chunk_words(TAKE))
         self.assertNotIn("does is", [c.lower() for c in chunks])
 
+    # test no multiword cue flashes
     def test_no_multiword_cue_flashes(self):
         for c in render.chunk_words(TAKE):
             # only the word cap may leave a multi-word cue under the minimum (very fast speech)
             if len(c) > 1 and len(c) < render.CHUNK_MAX_WORDS:
                 self.assertGreaterEqual(c[-1]["end"] - c[0]["start"], render.CHUNK_MIN_S, texts([c]))
 
+    # test punctuation still breaks
     def test_punctuation_still_breaks(self):
         self.assertEqual(texts(render.chunk_words([w("Hi,", 0, 0.1), w("there", 0.12, 0.2)])), ["Hi,", "there"])
 
+    # test caps at max words
     def test_caps_at_max_words(self):
         fast = [w(f"w{i}", i * 0.05, i * 0.05 + 0.04) for i in range(7)]
         self.assertTrue(all(len(c) <= render.CHUNK_MAX_WORDS for c in render.chunk_words(fast)))
 
+    # test skips empty words
     def test_skips_empty_words(self):
         self.assertEqual(texts(render.chunk_words([w(" ", 0, 0.1), w("ok", 0.1, 0.5)])), ["ok"])
 
 
+# build master srt tests
 class BuildMasterSrtTests(unittest.TestCase):
+    # test output timeline cues
     def test_output_timeline_cues(self):
         with tempfile.TemporaryDirectory() as d:
             edit = Path(d)
@@ -72,14 +84,50 @@ class BuildMasterSrtTests(unittest.TestCase):
             self.assertEqual([c[2] for c in cues], ["90% OF", "WHAT A WEB", "AGENT DOES", "IS COMPLETELY", "WASTED.", "WE FIX THIS."])
             self.assertEqual(cues[0][1], "00:00:00,090 --> 00:00:00,590")
 
+    # explicit grouping and text style survive the phrase aware merge
+    def test_explicit_caption_style_preserves_grouping_and_output(self):
+        with tempfile.TemporaryDirectory() as d:
+            edit = Path(d)
+            (edit / "transcripts").mkdir()
+            (edit / "transcripts" / "take.json").write_text(json.dumps({"words": TAKE}))
+            edl = {"sources": {"take": "take.mp4"},
+                   "ranges": [{"source": "take", "start": 2.55, "end": 6.8}],
+                   "captions": {"max_words": 1, "case": "natural"}}
+            out = edit / "master.srt"
+            render.build_master_srt(edl, edit, out)
+            original = out.read_text()
+            cues = [b.splitlines()[2] for b in original.strip().split("\n\n")]
+            self.assertEqual(cues[:3], ["90%", "of", "what"])
+            with self.assertRaises(FileExistsError):
+                render.build_master_srt(edl, edit, out)
+            self.assertEqual(out.read_text(), original)
 
+    # text styling alone retains the upstream phrase aware grouping
+    def test_text_style_uses_phrase_boundaries_by_default(self):
+        with tempfile.TemporaryDirectory() as d:
+            edit = Path(d)
+            (edit / "transcripts").mkdir()
+            (edit / "transcripts" / "take.json").write_text(json.dumps({"words": TAKE}))
+            edl = {"sources": {"take": "take.mp4"},
+                   "ranges": [{"source": "take", "start": 2.55, "end": 6.8}],
+                   "captions": {"case": "natural"}}
+            out = edit / "master.srt"
+            render.build_master_srt(edl, edit, out)
+            cues = [b.splitlines()[2] for b in out.read_text().strip().split("\n\n")]
+            self.assertEqual(cues[1], "what a web")
+            self.assertNotIn("does is", cues)
+
+
+# subtitles path tests
 class SubtitlesPathTests(unittest.TestCase):
+    # test relative to edl dir
     def test_relative_to_edl_dir(self):
         with tempfile.TemporaryDirectory() as d:
             edit = Path(d)
             (edit / "master.srt").write_text("")
             self.assertEqual(render.resolve_subtitles_path("master.srt", edit), (edit / "master.srt").resolve())
 
+    # test falls back to cwd
     def test_falls_back_to_cwd(self):
         # EDL in edit/ that says "edit/master.srt" (path written from the project root)
         with tempfile.TemporaryDirectory() as d:
@@ -94,6 +142,7 @@ class SubtitlesPathTests(unittest.TestCase):
                 os.chdir(cwd)
             self.assertEqual(got.resolve(), (root / "edit" / "master.srt").resolve())
 
+    # test missing is an error
     def test_missing_is_an_error(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(SystemExit) as e:
