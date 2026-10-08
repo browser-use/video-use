@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import subprocess
@@ -119,8 +120,20 @@ def resolve_subtitles_path(maybe_path: str, edit_dir: Path) -> Path:
 #
 # Fix: detect HDR via color_transfer and prepend a zscale+tonemap chain to the
 # vf graph so the output is clean Rec.709 SDR.
+#
+# The transfer is read from the first decoded frame, not only the stream
+# header: some cameras write bt2020-10 in the header and signal HLG in the
+# alternative-transfer SEI, which ffmpeg reports on decoded frames. Clips that
+# went through a messaging app or an editor can also lose some or all tags.
 
 HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}  # PQ (HDR10) and HLG
+# Rec.709-family and sRGB curves: a clip tagged with one of these is SDR, even
+# when it is 10-bit or BT.2020.
+SDR_TRANSFERS = {
+    "bt709", "smpte170m", "bt470m", "bt470bg", "smpte240m",
+    "bt2020-10", "bt2020-12", "iec61966-2-1",
+}
+COLOR_FIELDS = ("color_transfer", "color_primaries", "color_space", "pix_fmt")
 
 TONEMAP_CHAIN = (
     "zscale=t=linear:npl=100,"
@@ -132,18 +145,97 @@ TONEMAP_CHAIN = (
 )
 
 
-def is_hdr_source(video: Path) -> bool:
-    """Return True if the source uses a PQ or HLG transfer function."""
+def _probe_color_entries(video: Path, section: str, extra: list[str]) -> dict:
     try:
         out = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=color_transfer",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", *extra,
+             "-show_entries", f"{section}={','.join(COLOR_FIELDS)}",
+             "-of", "json", str(video)],
             capture_output=True, text=True, check=True,
         )
-        return out.stdout.strip() in HDR_TRANSFERS
-    except subprocess.CalledProcessError:
-        return False
+        return (json.loads(out.stdout).get(f"{section}s") or [{}])[0]
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def probe_color(video: Path) -> dict[str, str | None]:
+    """Colour fields of the first decoded frame, falling back to the stream header.
+
+    The `0%` seek in -read_intervals matters: without it a stream-copied trim
+    with an edit list returns no frame.
+    """
+    frame = _probe_color_entries(video, "frame", ["-read_intervals", "0%+#1"])
+    stream = _probe_color_entries(video, "stream", [])
+
+    def known(value: str | None) -> bool:
+        return value not in (None, "", "unknown", "unspecified", "reserved")
+
+    return {
+        field: frame.get(field) if known(frame.get(field))
+        else stream.get(field) if known(stream.get(field)) else None
+        for field in COLOR_FIELDS
+    }
+
+
+@functools.lru_cache(maxsize=None)
+def _pix_fmt_bit_depths() -> dict[str, int]:
+    """Deepest component of every pixel format, from the `ffprobe -pix_fmts` table."""
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-pix_fmts"],
+                             capture_output=True, text=True, check=True).stdout
+    except (subprocess.CalledProcessError, OSError):
+        return {}
+    depths = {}
+    for line in out.splitlines():
+        # FLAGS NAME NB_COMPONENTS BITS_PER_PIXEL BIT_DEPTHS, e.g. "IO... gray10le 1 10 10"
+        m = re.fullmatch(r"\S{5}\s+(\S+)\s+\d+\s+\d+\s+(\d+(?:-\d+)*)", line.strip())
+        if m:
+            depths[m[1]] = max(int(d) for d in m[2].split("-"))
+    return depths
+
+
+def _is_high_bit_depth(pix_fmt: str) -> bool:
+    depth = _pix_fmt_bit_depths().get(pix_fmt)
+    if depth is not None:
+        return depth > 8
+    # ffprobe older than 5.0 prints no BIT_DEPTHS column: read the depth from the name.
+    return bool(re.search(r"p1[0-6]|^p01[06]|(?:gray|rgb|bgr)1[0-6]", pix_fmt))
+
+
+def tonemap_filter(video: Path) -> str | None:
+    """The HDR → SDR chain for a PQ or HLG source, or None for SDR.
+
+    Exits when a 10-bit or BT.2020 clip has no HDR or SDR transfer to say which it is.
+    """
+    color = probe_color(video)
+    transfer = color["color_transfer"]
+    if transfer in HDR_TRANSFERS:
+        # zscale reads the input transfer, primaries and matrix from the frame.
+        # Pin the probed transfer and fill missing primaries/matrix with the
+        # BT.2020 values every HLG/PQ camera uses.
+        primaries = color["color_primaries"] or "bt2020"
+        matrix = color["color_space"] or "bt2020nc"
+        return (f"setparams=color_trc={transfer}:color_primaries={primaries}"
+                f":colorspace={matrix}," + TONEMAP_CHAIN)
+    if transfer in SDR_TRANSFERS:
+        return None
+    pix_fmt = color["pix_fmt"] or ""
+    wide = any("bt2020" in (color[f] or "") for f in ("color_primaries", "color_space"))
+    if wide or _is_high_bit_depth(pix_fmt):
+        hint = "BT.2020" if wide else pix_fmt
+        sys.exit(
+            f"{video.name}: {hint} with transfer {transfer or 'untagged'}, so it may be HLG, PQ, SDR "
+            "or log footage. Ask what it was recorded as, then re-tag it without re-encoding, e.g. "
+            "ffmpeg -i in.mov -c copy -bsf:v hevc_metadata=transfer_characteristics=18 out.mov "
+            "(18 HLG, 16 PQ, 1 SDR; h264_metadata for H.264)."
+        )
+    return None
+
+
+@functools.lru_cache(maxsize=None)
+def _source_tonemap_filter(video: Path) -> str | None:
+    """tonemap_filter once per source: a render cuts many segments from the same file."""
+    return tonemap_filter(video)
 
 
 def is_portrait_source(video: Path) -> bool:
@@ -274,8 +366,9 @@ def extract_segment(
         scale = "scale=-2:1920" if portrait else "scale=1920:-2"
 
     vf_parts: list[str] = []
-    if is_hdr_source(source):
-        vf_parts.append(TONEMAP_CHAIN)
+    tonemap = _source_tonemap_filter(source.resolve())
+    if tonemap:
+        vf_parts.append(tonemap)
     vf_parts.append(scale)
     if grade_filter:
         vf_parts.append(grade_filter)
