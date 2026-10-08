@@ -21,11 +21,13 @@ import sys
 from pathlib import Path
 
 
+# render seconds as a zero padded fixed width string so stamps line up in columns
 def format_time(seconds: float) -> str:
     """Format a time in seconds as "NNN.NN" with fixed 6-char width for alignment."""
     return f"{seconds:06.2f}"
 
 
+# render a duration as seconds or minutes plus seconds for the section headers
 def format_duration(seconds: float) -> str:
     """Format a duration as "Ms" or "Mm SSs"."""
     if seconds < 60:
@@ -35,6 +37,7 @@ def format_duration(seconds: float) -> str:
     return f"{m}m {s:04.1f}s"
 
 
+# walk scribe word entries and cut them into phrases on silence gaps or speaker changes
 def group_into_phrases(
     words: list[dict],
     silence_threshold: float = 0.5,
@@ -51,6 +54,7 @@ def group_into_phrases(
     current_start: float | None = None
     current_speaker: str | None = None
 
+    # emit the current phrase if it has any visible text then reset the accumulator
     def flush() -> None:
         nonlocal current_words, current_start, current_speaker
         if not current_words:
@@ -61,6 +65,7 @@ def group_into_phrases(
             raw = (w.get("text") or "").strip()
             if not raw:
                 continue
+            # wrap audio events in parentheses unless scribe already did
             if t == "audio_event":
                 if not raw.startswith("("):
                     raw = f"({raw})"
@@ -71,7 +76,9 @@ def group_into_phrases(
             current_speaker = None
             return
         text = " ".join(text_parts)
+        # glue punctuation tokens back onto the preceding word
         text = text.replace(" ,", ",").replace(" .", ".").replace(" ?", "?").replace(" !", "!")
+        # fall back through end then start then phrase start so a missing timestamp cannot break the flush
         end_time = current_words[-1].get("end", current_words[-1].get("start", current_start or 0.0))
         phrases.append({
             "start": current_start,
@@ -122,6 +129,7 @@ def group_into_phrases(
     return phrases
 
 
+# load one transcript json and return its name duration and phrase list
 def pack_one_file(json_path: Path, silence_threshold: float) -> tuple[str, float, list[dict]]:
     """Return (header_name, duration, phrases) for one transcript file."""
     data = json.loads(json_path.read_text())
@@ -134,6 +142,7 @@ def pack_one_file(json_path: Path, silence_threshold: float) -> tuple[str, float
     return json_path.stem, duration, phrases
 
 
+# build the markdown document with a header block and one section per transcript
 def render_markdown(entries: list[tuple[str, float, list[dict]]], silence_threshold: float) -> str:
     lines: list[str] = []
     lines.append("# Packed transcripts")
@@ -162,6 +171,7 @@ def render_markdown(entries: list[tuple[str, float, list[dict]]], silence_thresh
     return "\n".join(lines)
 
 
+# cli entry point that finds transcript json files packs them and writes takes_packed md
 def main() -> None:
     ap = argparse.ArgumentParser(description="Pack Scribe transcripts into takes_packed.md")
     ap.add_argument("--edit-dir", type=Path, required=True, help="Edit directory containing transcripts/")
