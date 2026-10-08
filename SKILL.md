@@ -76,6 +76,9 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
 - **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
+- **[Inspected subject layers](skills/video-workflows/subject-layers.md)** — source-bound mattes, layered freezes, parallax and silhouette reveals with explicit source/canvas geometry.
+- **[Authored clocks and pose registration](skills/video-workflows/edit-motion.md)** — exact source-frame sampling for speed ramps/holds and reviewed landmark alignment; picture only.
+- **[Optional subject masks](skills/video-workflows/subject-mattes.md)** — hash-bound frame sequences and authored point/box seeds through a separately installed SAM2 backend; inspect masks before use.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
