@@ -110,3 +110,5 @@ The self-eval loop runs `timeline_view` on the _rendered output_ at every cut bo
 5. **12 hard rules, artistic freedom elsewhere.** Production-correctness is non-negotiable. Taste isn't.
 
 See [`SKILL.md`](./SKILL.md) for the full production rules and editing craft.
+
+For original HTML/CSS/canvas motion, the optional [browser capture helper](skills/motion-design/references/browser-rendering.md) renders exact frame times to MP4 and saves proof frames and an asset manifest.

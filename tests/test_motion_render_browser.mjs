@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+
+const exec = promisify(execFile);
+const root = fileURLToPath(new URL('../', import.meta.url));
+const enabled = process.env.MOTION_BROWSER_TEST === '1';
+
+test('real browser exports exact frames and audio and rejects history-dependent scenes', { skip: !enabled, timeout: 120000 }, async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'motion-browser-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const scene = path.join(directory, 'scene.html');
+  const output = path.join(directory, 'final.mp4');
+  const audio = path.join(directory, 'tone.wav');
+  await fs.writeFile(scene, `<!doctype html><style>body{margin:0;background:#182030}div{width:40px;height:40px;background:#5de4ca}</style><div></div><script>window.seek=t=>document.querySelector('div').style.transform='translateX('+(t*100)+'px)';</script>`);
+  await exec('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2', audio]);
+  const base = [path.join(root, 'helpers/motion_render.mjs'), scene, '-o', output, '--duration', '1', '--fps', '10', '--width', '160', '--height', '90', '--deps', path.join(root, 'skills/motion-design/runtime')];
+  const render = args => exec(process.execPath, [...base, ...args], { timeout: 40000 });
+  const artifactDir = path.join(directory, 'proof');
+  await render(['--audio', audio, '--artifact-dir', artifactDir, '--stills', '0.10001,0.10002']);
+  const manifest = JSON.parse(await fs.readFile(path.join(artifactDir, 'render.json')));
+  const video = manifest.probe.streams.find(s => s.codec_type === 'video');
+  const sound = manifest.probe.streams.find(s => s.codec_type === 'audio');
+  assert.equal(video.nb_read_frames, '10');
+  assert.equal(video.avg_frame_rate, '10/1');
+  assert.equal(video.width, 160);
+  assert.equal(video.height, 90);
+  assert.ok(Math.abs(Number(video.duration) - 1) < 0.01);
+  assert.ok(sound, 'requested audio is present');
+  assert.ok(Math.abs(Number(sound.duration) - 1) < 0.05, `audio duration ${sound.duration}`);
+  assert.equal(manifest.deterministicChecks.length, 4);
+  assert.equal(new Set(manifest.stills.map(s => s.path)).size, 2);
+  const completed = await fs.readFile(output);
+  await assert.rejects(render([]), /Output exists/);
+  assert.deepEqual(await fs.readFile(output), completed);
+  await assert.rejects(render(['--stills-only', '--artifact-dir', artifactDir]), /EEXIST/);
+  assert.equal(JSON.parse(await fs.readFile(path.join(artifactDir, 'render.json'))).frameCount, 10);
+  // Each proof-only invocation uses a fresh directory, even when output exists.
+  await render(['--stills-only']);
+  await render(['--stills-only']);
+  assert.equal((await fs.readdir(directory)).filter(name => name.startsWith('final.render-')).length, 2);
+  await fs.writeFile(scene, `<!doctype html><style>body{margin:0}div{width:40px;height:40px;background:red}</style><div></div><script>let x=0;window.seek=()=>document.querySelector('div').style.transform='translateX('+(++x)+'px)';</script>`);
+  const failure = path.join(directory, 'failure');
+  await assert.rejects(render(['--overwrite', '--artifact-dir', failure]), /Nondeterministic frame/);
+  await fs.access(path.join(failure, 'seek-failure.json'));
+  assert.deepEqual(await fs.readFile(output), completed);
+});
