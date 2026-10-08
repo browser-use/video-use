@@ -39,6 +39,25 @@ except Exception:
         return "eq=contrast=1.03:saturation=0.98", {}
 
 
+try:
+    from transcribe import resolve_transcript_for_source  # same directory
+except ImportError:
+    def resolve_transcript_for_source(edit_dir: Path, source, audio_track: int = 0):  # type: ignore
+        """Fallback if transcribe.py cannot be imported: the pre-extension layout only.
+
+        Mirrors transcript_path()/legacy_transcript_path() - current name first, then the
+        stem-only one, both carrying the track suffix. It cannot check whether the stem is
+        shared, so a same-stem pair here can still read the same file.
+        """
+        src = Path(source)
+        suffix = "" if audio_track == 0 else f".track{audio_track}"
+        current = edit_dir / "transcripts" / f"{src.stem}{src.suffix}{suffix}.json"
+        if current.exists():
+            return current
+        legacy = edit_dir / "transcripts" / f"{src.stem}{suffix}.json"
+        return legacy if legacy.exists() else current
+
+
 # -------- Subtitle style (bold-overlay, proven at 1920×1080 and 1080×1920) --
 #
 # MarginV is NOT taste — it is a platform safe-zone rule.
@@ -472,7 +491,6 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
     - UPPERCASE text
     - Output times computed as word.start - segment_start + segment_offset
     """
-    transcripts_dir = edit_dir / "transcripts"
     sources = edl["sources"]
 
     entries: list[tuple[float, float, str]] = []
@@ -484,7 +502,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
         seg_end = float(r["end"])
         seg_duration = seg_end - seg_start
 
-        tr_path = transcripts_dir / f"{src_name}.json"
+        tr_path = resolve_transcript_for_source(edit_dir, sources.get(src_name, src_name))
         if not tr_path.exists():
             print(f"  no transcript for {src_name}, skipping captions for this segment")
             seg_offset += seg_duration

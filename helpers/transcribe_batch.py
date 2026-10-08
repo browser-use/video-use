@@ -1,7 +1,7 @@
 """Batch-transcribe every video in a directory with 4 parallel workers.
 
 Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
-each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
+each, writes transcripts to <videos_dir>/edit/transcripts/<name><ext>.json.
 
 Cached per-file: any source that already has a transcript is skipped.
 
@@ -20,10 +20,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one, transcript_path
-
-
-VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
+from transcribe import VIDEO_EXTS, load_api_key, resolve_transcript, transcribe_one
 
 
 def find_videos(videos_dir: Path) -> list[Path]:
@@ -32,6 +29,19 @@ def find_videos(videos_dir: Path) -> list[Path]:
         if p.is_file() and p.suffix in VIDEO_EXTS
     )
     return videos
+
+
+def select_pending(
+    videos: list[Path], edit_dir: Path, audio_track: int = 0
+) -> tuple[list[Path], list[Path]]:
+    """Split videos into the ones already transcribed and the ones still to do.
+
+    The cache test goes through the same resolver the writer does, so a take is only ever
+    skipped when resolve_transcript() points at a file that exists for that take.
+    """
+    cached = [v for v in videos if resolve_transcript(edit_dir, v, audio_track).exists()]
+    pending = [v for v in videos if v not in cached]
+    return cached, pending
 
 
 def main() -> None:
@@ -75,9 +85,7 @@ def main() -> None:
     if not videos:
         sys.exit(f"no videos found in {videos_dir}")
 
-    already_cached = [v for v in videos
-                      if transcript_path(edit_dir, v, args.audio_track).exists()]
-    pending = [v for v in videos if v not in already_cached]
+    already_cached, pending = select_pending(videos, edit_dir, args.audio_track)
 
     print(f"found {len(videos)} videos ({len(already_cached)} cached, {len(pending)} to transcribe)")
     if not pending:

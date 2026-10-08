@@ -2,9 +2,12 @@
 
 Extracts mono 16kHz audio via ffmpeg, uploads to Scribe with verbatim +
 diarize + audio events + word-level timestamps, writes the full response
-to <edit_dir>/transcripts/<video_stem>.json.
+to <edit_dir>/transcripts/<video_stem><video_ext>.json.
 
-Cached: if the output file already exists, the upload is skipped.
+Cached: if the output file already exists, the upload is skipped. Transcripts written
+before the extension was part of the name (<video_stem>.json) are still found and reused,
+except where another take in the same directory shares the stem and the old file cannot be
+told apart from it.
 
 Usage:
     python helpers/transcribe.py <video_path>
@@ -31,6 +34,8 @@ import requests
 
 
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+
+VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
 
 
 def load_api_key() -> str:
@@ -114,15 +119,77 @@ def call_scribe(
 
 
 def transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
-    """Where a video's transcript lands.
+    """Where a video's transcript is written.
 
-    The track belongs in the name, or a rerun with --audio-track hands back the transcript of
-    the track it is meant to replace. Track 0 keeps the plain name, so transcripts made before
-    the flag existed stay valid. Batch mode tests its cache with this too — one function, so
-    the two cannot drift apart.
+    The source extension belongs in the name, or two supported inputs in one directory that
+    share a stem (intro.mp4 and intro.mov) land on one file: both jobs write it concurrently
+    and whichever finishes last wins, while every later run calls both of them cached. The
+    track belongs in the name too, or a rerun with --audio-track hands back the transcript of
+    the track it is meant to replace.
     """
     suffix = "" if audio_track == 0 else f".track{audio_track}"
+    return edit_dir / "transcripts" / f"{video.stem}{video.suffix}{suffix}.json"
+
+
+def legacy_transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
+    """The stem-only name transcripts were written under before the extension was part of it."""
+    suffix = "" if audio_track == 0 else f".track{audio_track}"
     return edit_dir / "transcripts" / f"{video.stem}{suffix}.json"
+
+
+def stem_is_ambiguous(video: Path) -> bool:
+    """Whether a different supported video in the same directory shares this stem.
+
+    intro.mp4 and intro.mov are both transcribed into one edit dir, so the stem-only file
+    written before the extension was part of the name belongs to one of them and cannot be
+    attributed to either. Callers use this to refuse the legacy name rather than hand one
+    take the other's words.
+
+    Checks the small set of alternate VIDEO_EXTS paths directly rather than listing the
+    whole directory — batch mode calls this once per input for cache selection and again
+    for every pending input, so a full iterdir would be O(n²) on large takes folders.
+    """
+    parent = video.parent
+    for ext in VIDEO_EXTS:
+        if ext == video.suffix:
+            continue
+        sibling = parent / f"{video.stem}{ext}"
+        try:
+            if sibling.is_file():
+                return True
+        except OSError:
+            # Same as a directory that cannot be listed: no sibling can be proven, so the
+            # legacy name stays usable on the read side.
+            continue
+    return False
+
+
+def resolve_transcript(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
+    """The transcript to read for a video: the current name, else an unambiguous legacy one.
+
+    A project transcribed before the extension was part of the name keeps working - the old
+    file is still found - while every new write goes to the unambiguous name. The old file is
+    only reused when no other take in the directory shares the stem, because then it can only
+    have come from this video; where the stem is shared it is left alone rather than handed
+    to both. Batch mode tests its cache with this too, so the writer and the cache check
+    cannot drift apart.
+    """
+    current = transcript_path(edit_dir, video, audio_track)
+    if current.exists():
+        return current
+    if stem_is_ambiguous(video):
+        return current
+    legacy = legacy_transcript_path(edit_dir, video, audio_track)
+    return legacy if legacy.exists() else current
+
+
+def resolve_transcript_for_source(edit_dir: Path, source: str | Path, audio_track: int = 0) -> Path:
+    """The transcript to read for an EDL source, given the file the EDL names for it.
+
+    An EDL records the file, extension and all, so this is exact - a stem lookup could not
+    choose between two same-stem takes, and this does not have to.
+    """
+    return resolve_transcript(edit_dir, Path(source), audio_track)
 
 
 def transcribe_one(
@@ -140,7 +207,7 @@ def transcribe_one(
     """
     transcripts_dir = edit_dir / "transcripts"
     transcripts_dir.mkdir(parents=True, exist_ok=True)
-    out_path = transcript_path(edit_dir, video, audio_track)
+    out_path = resolve_transcript(edit_dir, video, audio_track)
 
     if out_path.exists():
         if verbose:

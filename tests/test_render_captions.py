@@ -72,6 +72,35 @@ class BuildMasterSrtTests(unittest.TestCase):
             self.assertEqual([c[2] for c in cues], ["90% OF", "WHAT A WEB", "AGENT DOES", "IS COMPLETELY", "WASTED.", "WE FIX THIS."])
             self.assertEqual(cues[0][1], "00:00:00,090 --> 00:00:00,590")
 
+    def test_captions_find_the_extension_qualified_transcript(self):
+        with tempfile.TemporaryDirectory() as d:
+            edit = Path(d)
+            (edit / "transcripts").mkdir()
+            (edit / "transcripts" / "C0103.MP4.json").write_text(json.dumps({"words": TAKE}))
+            edl = {"sources": {"C0103": "/abs/takes/C0103.MP4"}, "ranges": [{"source": "C0103", "start": 2.55, "end": 6.8}]}
+            out = edit / "master.srt"
+            render.build_master_srt(edl, edit, out)
+            self.assertEqual(len(out.read_text().strip().split("\n\n")), 6)
+
+    def test_each_same_stem_take_gets_its_own_captions(self):
+        with tempfile.TemporaryDirectory() as d:
+            edit = Path(d)
+            (edit / "transcripts").mkdir()
+            (edit / "transcripts" / "intro.mp4.json").write_text(json.dumps({"words": TAKE}))
+            # the .mov take gets its own words, so picking the wrong transcript - or picking
+            # none at all, which also leaves master.srt empty - cannot pass this
+            mov_words = [w("MOV", 2.60, 2.90), w("TAKE", 2.90, 3.10),
+                         w("ONLY", 3.10, 3.45)]
+            (edit / "transcripts" / "intro.mov.json").write_text(json.dumps({"words": mov_words}))
+            edl = {"sources": {"intro": "/abs/takes/intro.mov"}, "ranges": [{"source": "intro", "start": 2.55, "end": 6.8}]}
+            out = edit / "master.srt"
+            render.build_master_srt(edl, edit, out)
+            cues = [b.splitlines() for b in out.read_text().strip().split("\n\n")]
+            # chunk_words closes on a 2-word cue that lasts >= CHUNK_MIN_S, so the exact
+            # split does not matter - whose words appear is the whole point
+            self.assertEqual([c[2] for c in cues], ["MOV TAKE", "ONLY"])
+            self.assertNotIn("WASTED.", out.read_text())
+
 
 class SubtitlesPathTests(unittest.TestCase):
     def test_relative_to_edl_dir(self):
