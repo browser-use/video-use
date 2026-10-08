@@ -71,6 +71,9 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 
 ## Helpers
 
+- **`fetch_asset.py image|logo|emoji`** — acquire still assets with source metadata and protected outputs. See `references/assets.md`.
+- **`web_shot.py capture|card`** — capture webpage evidence and prepare transparent image cards. See `references/assets.md`.
+
 - **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
