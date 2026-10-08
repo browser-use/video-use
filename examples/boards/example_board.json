@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 6.0,
+  "sfx": "sparse",
+  "style": {
+    "bg": "#0E0D14",
+    "accent": "#F5546B"
+  },
+  "beats": [
+    {
+      "id": "hook",
+      "at": 0.0,
+      "elements": [
+        {
+          "id": "hook_text",
+          "kind": "text",
+          "text": "A small idea",
+          "style": "display",
+          "size": 128,
+          "x": 0.5,
+          "y": 0.4,
+          "enter": "pop"
+        },
+        {
+          "id": "hook_sub",
+          "kind": "text",
+          "text": "made visible",
+          "style": "display",
+          "size": 90,
+          "color": "muted",
+          "x": 0.5,
+          "y": 0.58,
+          "enter": "fade",
+          "at": 0.6
+        }
+      ]
+    },
+    {
+      "id": "reveal",
+      "at": 1.6,
+      "elements": [
+        {
+          "id": "reveal_text",
+          "kind": "text",
+          "text": "Step by step",
+          "style": "display",
+          "size": 130,
+          "color": "accent",
+          "x": 0.5,
+          "y": 0.5,
+          "enter": "whip_left"
+        }
+      ]
+    },
+    {
+      "id": "code",
+      "at": 3.0,
+      "elements": [
+        {
+          "id": "label",
+          "kind": "text",
+          "text": "Type inference",
+          "style": "label",
+          "box": "cyan",
+          "color": "white",
+          "size": 64,
+          "x": 0.5,
+          "y": 0.14,
+          "enter": "wipe"
+        },
+        {
+          "id": "snippet",
+          "kind": "code",
+          "lang": "go",
+          "code": "x := 42\nfmt.Println(x)",
+          "size": 40,
+          "x": 0.5,
+          "y": 0.55,
+          "enter": "type",
+          "enter_duration": 1.0,
+          "at": 0.3
+        }
+      ]
+    }
+  ]
+}
