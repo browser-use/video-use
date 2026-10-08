@@ -110,3 +110,5 @@ The self-eval loop runs `timeline_view` on the _rendered output_ at every cut bo
 5. **12 hard rules, artistic freedom elsewhere.** Production-correctness is non-negotiable. Taste isn't.
 
 See [`SKILL.md`](./SKILL.md) for the full production rules and editing craft.
+
+For authored browser animations, optional [motion primitives](skills/motion-design/references/runtime.md) provide numeric keyframes, transforms, text fitting, media seeking, and two-bone rigs without additional npm dependencies.
