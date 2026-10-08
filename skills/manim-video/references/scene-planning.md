@@ -1,118 +1,130 @@
-# Scene Planning Reference
+# Semantic Chapter Planning Reference
+
+Use this reference with the required `edit/visual_plan.md` contract in
+`concept-explainer.md`. The artifact guides custom authoring; it is not a rigid
+scene compiler.
 
 ## Narrative Arc Structures
 
-### Discovery Arc (most common)
-1. Hook -- pose a question or surprising result
-2. Intuition -- build visual understanding
-3. Formalize -- introduce the equation/algorithm
-4. Reveal -- the "aha moment"
-5. Extend -- implications or generalizations
+### Discovery Arc
+
+1. Hook — pose the central question or expose the misconception.
+2. Intuition — construct a visual model the audience can manipulate mentally.
+3. Formalize — connect the model to notation, an algorithm, or a mechanism.
+4. Reveal — coordinate the representations into the final aha moment.
+5. Extend — show one implication without diluting the thesis.
 
 ### Problem-Solution Arc
-1. Problem -- what's broken
-2. Failed attempt -- obvious approach fails
-3. Key insight -- the idea that works
-4. Solution -- implement it
-5. Result -- show improvement
+
+1. Problem — make the failure visible in a persistent system.
+2. Failed attempt — transform the same system and show why it still fails.
+3. Key insight — introduce the missing relationship.
+4. Solution — update the system causally.
+5. Result — compare the original and final states.
 
 ### Comparison Arc
-1. Setup -- introduce two approaches
-2. Approach A -- how it works
-3. Approach B -- how it works
-4. Contrast -- differences
-5. Verdict -- which is better
 
-### Build-Up Arc (architecture/systems)
-1. Component A -- first piece
-2. Component B -- second piece
-3. Connection -- how they interact
-4. Scale -- add more pieces
-5. Full picture -- zoom out
+1. Setup — establish shared inputs and measures.
+2. Approach A — transform the first copy.
+3. Approach B — transform the second copy.
+4. Contrast — link differences to the same underlying values.
+5. Verdict — land on a frame that makes the decision legible.
 
-## Scene Transitions
+### Build-Up Arc
 
-### Clean Break (default)
-```python
-self.play(FadeOut(Group(*self.mobjects)), run_time=0.5)
-self.wait(0.3)
-```
+1. Establish the first component.
+2. Add the next component without moving the first arbitrarily.
+3. Reveal the relationship through transfer or flow.
+4. Change scale or conditions while linked representations update.
+5. Move the camera only when the full system or a local mechanism is the payoff.
 
-### Carry-Forward
-Keep one element, fade the rest. Next scene starts with it still on screen.
+## Chapter Boundaries
 
-### Transform Bridge
-End scene with a shape, start next scene by transforming it.
+Create one independently renderable class per narrative chapter. Within it, use
+`begin_beat()` or `next_section()` for the teaching beats. A boundary is not an
+instruction to clear the frame:
 
-## Cross-Scene Consistency
+- **Carry forward** an important object in its current state.
+- **Transform bridge** one object into the next representation while preserving
+  its semantic identity.
+- **Context shift** keep the system visible but dim or reframe it.
+- **Deliberate departure** remove an object only when its absence communicates
+  completion, replacement, loss, or a change of scope.
 
-```python
-# Shared constants at file top
-BG = "#1C1C1C"
-PRIMARY = "#58C4DD"
-SECONDARY = "#83C167"
-ACCENT = "#FFFF00"
-TITLE_SIZE = 48
-BODY_SIZE = 30
-LABEL_SIZE = 24
-FAST = 0.8; NORMAL = 1.5; SLOW = 2.5
-```
+Hard cuts and fades are valid editorial choices when intentional. They are not
+default cleanup operations.
 
-## Scene Checklist
+## Cross-Chapter Consistency
 
-- [ ] Background color set
-- [ ] Subcaptions on every animation
-- [ ] `self.wait()` after every reveal
-- [ ] Text buff >= 0.5 for edge positioning
-- [ ] No text overlap
-- [ ] Color constants used (not hardcoded)
-- [ ] Opacity layering applied
-- [ ] Clean exit at scene end
-- [ ] No more than 5-6 elements visible at once
+- One shared `VisualTheme` defines semantic color and font roles.
+- The same concept keeps its color role and approximate position.
+- Repeated quantities use one `LinkedValue` or one source calculation.
+- Motion vocabulary remains coherent; vary it only when the meaning changes.
+- A chapter payoff should become the next chapter's context when the narrative
+  depends on it.
 
-## Duration Estimation
+## Chapter Checklist
 
-| Content | Duration |
-|---------|----------|
-| Title card | 3-5s |
-| Concept introduction | 10-20s |
-| Equation reveal | 15-25s |
-| Algorithm step | 5-10s |
-| Data comparison | 10-15s |
-| "Aha moment" | 15-30s |
-| Conclusion | 5-10s |
+- [ ] The chapter advances one stage of the teaching thesis.
+- [ ] Internal beats are named with section markers.
+- [ ] Persistent objects have semantic names.
+- [ ] Each beat specifies initial state, visible action, and resulting state.
+- [ ] Coupled representations update together.
+- [ ] Camera movement or dimming has an explicit attention purpose.
+- [ ] The final frame proves the planned claim.
+- [ ] Carried objects are named for the next beat or chapter.
+- [ ] All text and teaching content remain frame-safe.
+
+## Duration Heuristics
+
+| Content | Typical duration |
+|---|---:|
+| Establish a visual model | 5–10s |
+| Construct a relationship | 8–15s |
+| Transform or compare states | 6–12s |
+| Dense payoff study | 3–6s |
+| Extend the result | 5–10s |
+
+These are planning ranges, not pacing presets. Narration alignment and viewer
+comprehension decide the real timing.
 
 ## Planning Template
 
 ```markdown
-# [Video Title]
+# [Video title]
 
-## Overview
-- **Topic**: [Core concept]
-- **Hook**: [Opening question]
-- **Aha moment**: [Key insight]
-- **Target audience**: [Prerequisites]
-- **Length**: [seconds/minutes]
-- **Resolution**: 480p (draft) / 1080p (final)
+## Teaching contract
+- Audience and assumed knowledge:
+- Central question or misconception:
+- Teaching thesis:
+- Final aha moment:
+- Target duration and delivery:
+- Visual direction:
 
-## Color Palette
-- Background: #1C1C1C
-- Primary: #58C4DD -- [purpose]
-- Secondary: #83C167 -- [purpose]
-- Accent: #FFFF00 -- [purpose]
+## Semantic theme
+- Background:
+- Text:
+- Muted/context:
+- Primary meaning:
+- Secondary meaning:
+- Accent meaning:
+- Warning meaning:
+- Title/body/label font roles:
 
-## Arc: [Discovery / Problem-Solution / Comparison / Build-Up]
+## Chapter map
+| Chapter class | Purpose | Narration span | Entry state | Payoff state |
+|---|---|---|---|---|
 
-## Scene 1: [Name] (~Ns)
-**Purpose**: [one sentence]
-**Layout**: [FULL_CENTER / LEFT_RIGHT / GRID / PROGRESSIVE]
+## Beat plan
+| Narration span | Named objects | Initial state | Object state change | Relationships updated together | Camera/attention | Result and proof | Carried forward |
+|---|---|---|---|---|---|---|---|
 
-### Visual elements
-- [Mobject: type, position, color]
+## Payoff frame
+- Remaining objects and states:
+- Relationship the viewer should see:
+- Hold purpose and duration:
 
-### Animation sequence
-1. [Animation] -- [what it reveals] (~Ns)
-
-### Subtitle
-"[text]"
+## Optional footage
+| Beat | Source/provenance | Crop/timing | Why footage is better than illustration |
+|---|---|---|---|
 ```

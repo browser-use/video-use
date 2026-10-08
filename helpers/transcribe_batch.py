@@ -26,6 +26,7 @@ from transcribe import load_api_key, transcribe_one, transcript_path
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
 
 
+# list files in the directory whose suffix is a known video extension in sorted order
 def find_videos(videos_dir: Path) -> list[Path]:
     videos = sorted(
         p for p in videos_dir.iterdir()
@@ -34,6 +35,7 @@ def find_videos(videos_dir: Path) -> list[Path]:
     return videos
 
 
+# cli entry point that splits videos into cached and pending sets then transcribes the pending ones in parallel
 def main() -> None:
     ap = argparse.ArgumentParser(description="Parallel batch transcription of a videos directory")
     ap.add_argument("videos_dir", type=Path, help="Directory containing source videos")
