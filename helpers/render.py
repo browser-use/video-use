@@ -713,6 +713,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Render a video from an EDL")
     ap.add_argument("edl", type=Path, help="Path to edl.json")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output video path")
+    ap.add_argument("--check", action="store_true", help="Check this edit and output path without rendering")
     ap.add_argument(
         "--preview",
         action="store_true",
@@ -752,9 +753,21 @@ def main() -> None:
     if not edl_path.exists():
         sys.exit(f"edl not found: {edl_path}")
 
-    edl = json.loads(edl_path.read_text())
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
+
+    try:
+        from check_edit import check_edit, print_report
+    except ImportError:
+        from .check_edit import check_edit, print_report
+    report = check_edit(edl_path, args.output, build_subtitles=args.build_subtitles,
+                        no_subtitles=args.no_subtitles, no_loudnorm=args.no_loudnorm)
+    print_report(report)
+    if not report["ok"]:
+        sys.exit("Edit checks failed; fix the reported items before rendering")
+    if args.check:
+        return
+    edl = json.loads(edl_path.read_text(encoding="utf-8"))
 
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(

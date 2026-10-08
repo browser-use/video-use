@@ -130,9 +130,29 @@ Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
 Run one real thing. Prefer the lightest verification that still proves the pipeline is wired up:
 
 ```bash
+python helpers/check_env.py --videos-dir /path/to/your/videos
 python ~/Developer/video-use/helpers/timeline_view.py --help >/dev/null && echo "helpers OK"
 ffprobe -version | head -1
 ```
+
+The preflight command checks `ffmpeg`, `ffprobe`, the footage directory, and the
+`edit/` output directory. Optional animation engines are checked only when
+requested, for example:
+
+```bash
+python helpers/check_env.py \
+  --videos-dir /path/to/your/videos \
+  --require manim \
+  --require remotion \
+  --backend-dir /path/to/your/remotion-project
+```
+
+For npm backends, `--backend-dir` selects the project containing the installed
+backend, independently of the shell's working directory. It defaults to
+`--videos-dir`; check backends in separate projects with separate commands.
+
+It exits non-zero when a required check fails. It doesn't install anything or
+contact external services.
 
 Full transcription test is optional at install time — it burns Scribe credits. Better to wait until the user hands you their first clip.
 

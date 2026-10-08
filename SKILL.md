@@ -59,6 +59,7 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 
 First-time install lives in `install.md` (clone, deps, ffmpeg, skill registration, API key). Don't re-run it every session; on cold start just verify:
 
+- `python helpers/check_env.py --videos-dir <videos_dir>` passes. Add `--require manim`, `--require remotion`, or `--require hyperframes` when the session will use that backend. For npm backends, pass `--backend-dir <backend_project>` to check that project's installation.
 - `ELEVENLABS_API_KEY` resolves — either in the environment or in `.env` at the video-use repo root. If missing, ask the user to paste one and write it to `.env` (never to the user's `<videos_dir>`).
 - `ffmpeg` + `ffprobe` on PATH.
 - Python deps installed (`uv sync` or `pip install -e .` inside the repo).
@@ -70,6 +71,8 @@ First-time install lives in `install.md` (clone, deps, ffmpeg, skill registratio
 Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this SKILL.md. Resolve their paths relative to the directory containing this file — the skill is typically symlinked at `~/.claude/skills/video-use/` or `~/.codex/skills/video-use/`.
 
 ## Helpers
+
+- **`render.py --check`, `check_edit.py`** — check planned files, timing and required tools before rendering. See [edit checks](references/edit-checks.md).
 
 - **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
