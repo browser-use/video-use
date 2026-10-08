@@ -110,3 +110,5 @@ The self-eval loop runs `timeline_view` on the _rendered output_ at every cut bo
 5. **12 hard rules, artistic freedom elsewhere.** Production-correctness is non-negotiable. Taste isn't.
 
 See [`SKILL.md`](./SKILL.md) for the full production rules and editing craft.
+
+For graphics attached to a filmed surface, the optional [planar tracking helper](skills/motion-design/references/footage-tracking.md) measures perspective transforms and hides overlays when tracking is lost.
