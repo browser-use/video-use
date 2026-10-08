@@ -46,7 +46,7 @@ If the repo is already there, `git pull --ff-only` and continue.
 command -v uv >/dev/null && uv sync || pip install -e .
 ```
 
-`pyproject.toml` lists `requests`, `librosa`, `matplotlib`, `pillow`, `numpy`. No console scripts — helpers are invoked directly as `python helpers/<name>.py`.
+`pyproject.toml` lists `requests`, `librosa`, `matplotlib`, `pillow`, `numpy`. No console scripts — helpers are invoked directly as `python helpers/<name>.py`. Manim is an optional extra for original explainers: `uv sync --extra animations` installs it now, or leave it for the first Manim slot.
 
 ### 3. Install ffmpeg (+ optional yt-dlp)
 
@@ -132,6 +132,7 @@ Run one real thing. Prefer the lightest verification that still proves the pipel
 ```bash
 python ~/Developer/video-use/helpers/timeline_view.py --help >/dev/null && echo "helpers OK"
 ffprobe -version | head -1
+cd ~/Developer/video-use && python -m pytest -q   # proves every helper imports; Manim tests skip when it is not installed
 ```
 
 Full transcription test is optional at install time — it burns Scribe credits. Better to wait until the user hands you their first clip.

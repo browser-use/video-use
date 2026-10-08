@@ -58,7 +58,7 @@ Each beat is one `self.play()` call or a small group of simultaneous animations.
 
 ## Pacing: the universal mistake is too fast
 
-### Timing rules
+### Timing starting points
 
 | Content type | Minimum on-screen time |
 |-------------|----------------------|
@@ -66,16 +66,18 @@ Each beat is one `self.play()` call or a small group of simultaneous animations.
 | New concept label | 1.0s animation + 1.0s pause |
 | Key insight ("aha moment") | 2.5s animation + 3.0s pause |
 | Supporting annotation | 0.8s animation + 0.5s pause |
-| Scene transition (FadeOut all) | 0.5s animation + 0.3s pause |
+| Deliberate chapter transition | enough time to preserve continuity and orientation |
 
 ### Breathing room
 
-After every reveal, add `self.wait()`. The viewer needs time to:
+After a meaningful reveal, hold long enough for the viewer to:
 1. Read the new text
 2. Connect it to what's already on screen
 3. Form an expectation about what comes next
 
-**No wait = the viewer is always behind you.** They're still reading the equation when you've already started transforming it.
+Do not add a pause mechanically after every animation. Tie the hold to reading,
+comparison, prediction, or payoff, and keep related motion continuous when a
+pause would break causality.
 
 ### Tempo variation
 

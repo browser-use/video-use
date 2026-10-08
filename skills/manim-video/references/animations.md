@@ -141,9 +141,8 @@ self.wait(2.0)
 # Dim-and-focus
 self.play(old_content.animate.set_opacity(0.3), FadeIn(new_content))
 
-# Clean exit
-self.play(FadeOut(Group(*self.mobjects)), run_time=0.5)
-self.wait(0.3)
+# Deliberate departure: only the obsolete annotation leaves.
+self.play(FadeOut(obsolete_annotation), run_time=0.5)
 ```
 
 ## Reactive Mobjects: always_redraw()

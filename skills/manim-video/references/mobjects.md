@@ -106,8 +106,8 @@ shapes.set_color(BLUE)
 labeled_shape = Group(circle, Text("Label").next_to(circle, DOWN))
 labeled_shape.move_to(ORIGIN)
 
-# FadeOut everything on screen (may contain mixed types)
-self.play(FadeOut(Group(*self.mobjects)))
+# A deliberate mixed-type departure can use Group.
+self.play(FadeOut(Group(label, circle)))
 ```
 
 **Rule: if your group contains any `Text()` objects, use `Group`, not `VGroup`.** VGroup will raise a TypeError on Manim CE v0.20+. MathTex and Tex are VMobjects and work with VGroup.
