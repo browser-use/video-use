@@ -1,7 +1,7 @@
 [project]
 name = "video-use"
 version = "0.1.0"
-description = "Conversation-driven video editor skill for Claude Code"
+description = "Conversation-driven video production framework for coding agents"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
@@ -14,6 +14,10 @@ dependencies = [
 
 [project.optional-dependencies]
 animations = ["manim"]
+# local transcription: one of these per machine, chosen by helpers/local_stt.py probe
+stt-mlx = ["mlx-whisper>=0.4.3"]
+stt-cpu = ["faster-whisper>=1.2.1"]
+stt-cuda = ["faster-whisper>=1.2.1", "nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -21,3 +25,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = []
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
