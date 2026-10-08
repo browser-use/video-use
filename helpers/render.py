@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
+import shutil
 import subprocess
 import sys
 from fractions import Fraction
@@ -572,13 +574,29 @@ def apply_loudnorm_two_pass(
 ) -> bool:
     """Run two-pass loudnorm on input_path, write normalized copy to output_path.
 
-    Returns True on success, False if measurement failed (caller should fall
-    back to copying the input unchanged).
+    Returns True after writing either a normalized copy or an unchanged copy for
+    audio with no finite integrated loudness.
 
-    In preview mode, skips the measurement pass and uses a one-pass approximation
-    for speed. Final mode always does the proper two-pass.
+    Preview mode uses a one-pass approximation after measuring only to detect
+    digital silence. Final mode uses the measurement for the proper two-pass.
     """
-    if preview:
+    print(f"  loudnorm pass 1: measuring {input_path.name}")
+    measurement = measure_loudness(input_path)
+    if measurement is not None:
+        try:
+            input_i = float(measurement["input_i"])
+        except (TypeError, ValueError):
+            measurement = None
+        else:
+            if not math.isfinite(input_i):
+                print("  audio is silent — skipping loudness normalization")
+                shutil.copyfile(input_path, output_path)
+                return True
+
+    if measurement is None:
+        print("  loudnorm measurement failed — falling back to 1-pass")
+
+    if preview or measurement is None:
         # One-pass approximation — faster, slightly less accurate.
         filter_str = f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}"
         cmd = [
@@ -590,16 +608,12 @@ def apply_loudnorm_two_pass(
             "-movflags", "+faststart",
             str(output_path),
         ]
-        print(f"  loudnorm (1-pass preview) → {output_path.name}")
+        mode = "1-pass preview" if preview else "1-pass fallback"
+        print(f"  loudnorm ({mode}) → {output_path.name}")
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         return True
 
     # Full two-pass
-    print(f"  loudnorm pass 1: measuring {input_path.name}")
-    measurement = measure_loudness(input_path)
-    if measurement is None:
-        print("  loudnorm measurement failed — falling back to 1-pass")
-        return apply_loudnorm_two_pass(input_path, output_path, preview=True)
 
     print(f"    measured: I={measurement['input_i']} LUFS  "
           f"TP={measurement['input_tp']}  LRA={measurement['input_lra']}")
