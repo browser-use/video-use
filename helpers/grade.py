@@ -75,6 +75,11 @@ def get_preset(name: str) -> str:
 # -------- Auto grade (data-driven, per-clip) --------------------------------
 
 
+def _esc_filter_path(path: str) -> str:
+    """A filesystem path safe to embed in an ffmpeg filter option value."""
+    return path.replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+
+
 def _sample_frame_stats(
     video: Path,
     start: float,
@@ -106,7 +111,10 @@ def _sample_frame_stats(
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            # The path lands inside a filter option value, where the parser reads the
+            # drive colon as an option separator: C:\tmp\x.txt becomes an option named
+            # "tmp\x.txt". Escaped the same way subtitles= already is in render.py.
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file='{_esc_filter_path(metadata_path)}'",
             "-f", "null", "-",
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
