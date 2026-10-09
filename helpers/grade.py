@@ -34,6 +34,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+try:
+    from _util import configure_stdout
+except ModuleNotFoundError:
+    from helpers._util import configure_stdout
+
 
 PRESETS: dict[str, str] = {
     # Subtle baseline — barely perceptible cleanup. No color shift.
@@ -292,6 +297,7 @@ def apply_grade(input_path: Path, output_path: Path, filter_string: str) -> None
 
 
 def main() -> None:
+    configure_stdout()
     ap = argparse.ArgumentParser(description="Apply a color grade via ffmpeg filter chain")
     ap.add_argument("input", type=Path, nargs="?", help="Input video")
     ap.add_argument("-o", "--output", type=Path, help="Output video")
