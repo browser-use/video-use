@@ -1,0 +1,25 @@
+[
+  {
+    "name": "promo_en",
+    "source": "raw/take_a.mp4",
+    "srt": "script.srt",
+    "plan": "edit_plan.json",
+    "bg_volume": 0.0,
+    "style": "bold-uppercase"
+  },
+  {
+    "name": "promo_cn",
+    "source": "raw/take_a.mp4",
+    "srt": "script_cjk.srt",
+    "plan": "edit_plan.json",
+    "bg_volume": 0.1,
+    "style": "cjk-natural"
+  },
+  {
+    "name": "promo_multi",
+    "srt": "script.srt",
+    "plan": "edit_plan_v2.json",
+    "bg_volume": 0.0,
+    "style": "auto"
+  }
+]

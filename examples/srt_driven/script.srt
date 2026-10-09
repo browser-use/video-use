@@ -1,0 +1,11 @@
+1
+00:00:00,000 --> 00:00:03,000
+Ninety percent of what an agent does is wasted.
+
+2
+00:00:03,000 --> 00:00:07,000
+We rewrote the planner from scratch this quarter.
+
+3
+00:00:08,500 --> 00:00:12,000
+Here is what changed and what it cost us.

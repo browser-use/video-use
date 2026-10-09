@@ -1,0 +1,32 @@
+{
+  "sources": {
+    "A": "raw/take_a.mp4",
+    "B": "raw/take_b.mp4"
+  },
+  "voices": {
+    "host": "voice/host.wav",
+    "guest": "voice/guest.wav"
+  },
+  "segments": [
+    {
+      "id": 1,
+      "source": "A",
+      "source_start": "00:12:30,000",
+      "source_end": "00:12:33,000",
+      "voice": "host"
+    },
+    {
+      "id": 2,
+      "source": "B",
+      "source_start": "00:18:05,000",
+      "source_end": "00:18:09,000",
+      "voice": "guest"
+    },
+    {
+      "id": 3,
+      "source": "A",
+      "source_start": "00:22:14,500",
+      "source_end": "00:22:18,000"
+    }
+  ]
+}
