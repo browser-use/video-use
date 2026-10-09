@@ -3,7 +3,7 @@
 Implements the HEURISTICS render pipeline in the correct order:
 
   1. Per-segment extract with color grade + 30ms audio fades baked in
-  2. Lossless -c copy concat into base.mp4
+  2. Concat into base.mp4 with copied video and continuous AAC audio
   3. If overlays or subtitles: single filter graph that overlays animations
      (with PTS shift so frame 0 lands at the overlay window start)
      and applies `subtitles` filter LAST → final.mp4
@@ -379,11 +379,11 @@ def extract_all_segments(
     return seg_paths
 
 
-# -------- Lossless concat ----------------------------------------------------
+# -------- Concat ----------------------------------------------------
 
 
 def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
-    """Lossless concat via the concat demuxer. No re-encode."""
+    """Copy video and re-encode audio to avoid AAC priming clicks at segment joins."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
     concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
@@ -392,7 +392,7 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
         "-i", str(concat_list),
-        "-c", "copy",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
         str(out_path),
     ]
