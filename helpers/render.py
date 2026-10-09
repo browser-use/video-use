@@ -254,8 +254,10 @@ def extract_segment(
     preview: bool = False,
     draft: bool = False,
     rate: str | None = None,
+    fade_in: float = 0.03,
+    fade_out: float = 0.03,
 ) -> None:
-    """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
+    """Extract a cut range as its own MP4 with grade + audio fades baked in.
 
     `-ss` before `-i` for fast accurate seeking. Scale to 1080p from 4K.
     Portrait sources (height > width) are scaled by height to preserve orientation.
@@ -281,9 +283,8 @@ def extract_segment(
         vf_parts.append(grade_filter)
     vf = ",".join(vf_parts)
 
-    # 30ms audio fades at both edges (Rule 3) — prevent pops
-    fade_out_start = max(0.0, duration - 0.03)
-    af = f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+    fade_out_start = max(0.0, duration - fade_out)
+    af = f"afade=t=in:st=0:d={fade_in:.3f},afade=t=out:st={fade_out_start:.3f}:d={fade_out:.3f}"
 
     if draft:
         preset, crf = "ultrafast", "28"
@@ -369,11 +370,13 @@ def extract_all_segments(
         else:
             seg_filter = resolved
 
+        fade_in = float(r.get("fade_in", 0.03))
+        fade_out_val = float(r.get("fade_out", 0.03))
         note = r.get("beat") or r.get("note") or ""
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate)
+        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate, fade_in=fade_in, fade_out=fade_out_val)
         seg_paths.append(out_path)
 
     return seg_paths
@@ -483,6 +486,10 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
         seg_start = float(r["start"])
         seg_end = float(r["end"])
         seg_duration = seg_end - seg_start
+
+        if r.get("subtitles") is False:
+            seg_offset += seg_duration
+            continue
 
         tr_path = transcripts_dir / f"{src_name}.json"
         if not tr_path.exists():
