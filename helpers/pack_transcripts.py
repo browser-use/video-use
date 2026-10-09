@@ -20,6 +20,16 @@ import json
 import sys
 from pathlib import Path
 
+# The summary print below uses an arrow (→). On Windows, stdout's default
+# encoding is the legacy console codepage (e.g. cp1252), which can't encode
+# it and raises UnicodeEncodeError. Force UTF-8 regardless of platform or
+# locale so the same print works unmodified on Windows, macOS, and Linux.
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 
 def format_time(seconds: float) -> str:
     """Format a time in seconds as "NNN.NN" with fixed 6-char width for alignment."""

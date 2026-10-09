@@ -22,6 +22,16 @@ from pathlib import Path
 
 from transcribe import load_api_key, transcribe_one, transcript_path
 
+# Console output uses arrows (→) below. On Windows, stdout's default
+# encoding is the legacy console codepage (e.g. cp1252), which can't encode
+# them and raises UnicodeEncodeError. Force UTF-8 regardless of platform or
+# locale so the same prints work unmodified on Windows, macOS, and Linux.
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
 
