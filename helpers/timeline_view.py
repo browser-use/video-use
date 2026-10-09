@@ -157,6 +157,10 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/SFNSMono.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    # Windows. Malgun Gothic first: it covers Hangul + CJK, so non-Latin
+    # transcripts render instead of falling back to the glyphless default font.
+    "C:/Windows/Fonts/malgun.ttf",
+    "C:/Windows/Fonts/consola.ttf",
 ]
 
 

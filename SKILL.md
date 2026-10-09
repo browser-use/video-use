@@ -31,6 +31,10 @@ These are the things where deviation produces silent failures or broken output. 
 10. **Parallel sub-agents for multiple animations.** Never sequential. Spawn N at once via the `Agent` tool; total wall time ≈ slowest one.
 11. **Strategy confirmation before execution.** Never touch the cut until the user has approved the plain-English plan.
 12. **All session outputs in `<videos_dir>/edit/`.** Never write inside the `video-use/` project directory.
+13. **Human-facing times come from measured segment durations, not EDL arithmetic.** Segments are cut to frame boundaries, so each renders ~1 frame long; over 46 segments that was 340.96s of arithmetic against 344.31s on disk. Subtitle and overlay placement must read the rendered files. And **a clips directory belongs to exactly one EDL** — segment filenames carry only an index and a source name, so a leftover render of a different EDL matches by name and hands back the wrong durations. Compare `clips_*/_ranges.json` before trusting them. Silent failure: captions drift with no error.
+14. **`loudnorm` runs once, on the finished cut.** Never inside a per-segment capture chain — segments are normalized independently, so a quiet one gets lifted to match a loud one and the relative levels between segments are destroyed. Silent failure: the mix sounds flat and pumped.
+15. **`crop` before `scale`.** Crop values are measured against the source's own resolution; after the scale they reframe a different picture, and a 4K-measured crop does not even fit a 1080p frame.
+16. **Zero-pad frame sequences to 5 digits (`%05d`).** `%04d` stops at 8999 with no error and no warning — the tail of the overlay simply never composites. Silent failure, and the worst kind: the first half looks perfect.
 
 Everything else in this document is a worked example. Deviate whenever the material calls for it.
 
@@ -293,9 +297,12 @@ Match the source unless the user asked for something specific. Common targets: `
     {"source": "C0103", "start": 2.42, "end": 6.85,
      "beat": "HOOK", "quote": "...", "reason": "Cleanest delivery, stops before slip at 38.46."},
     {"source": "C0108", "start": 14.30, "end": 28.90,
-     "beat": "SOLUTION", "quote": "...", "reason": "Only take without the false start."}
+     "beat": "SOLUTION", "quote": "...", "reason": "Only take without the false start.",
+     "grade": "lutyuv=y='val-7':u='val+7':v='val-3'",
+     "crop": "3400:1912:340:200"}
   ],
   "grade": "warm_cinematic",
+  "audio": "highpass=f=85,equalizer=f=280:t=q:w=0.7:g=-4",
   "overlays": [
     {"file": "edit/animations/slot_1/render.mp4", "start_in_output": 0.0, "duration": 5.0}
   ],
@@ -304,7 +311,13 @@ Match the source unless the user asked for something specific. Common targets: `
 }
 ```
 
-`grade` is a preset name or raw ffmpeg filter. `overlays` are rendered animation clips. `subtitles` is optional and applied LAST.
+`grade` is a preset name, a raw ffmpeg filter, or `"auto"`. `overlays` are rendered animation clips. `subtitles` is optional and applied LAST.
+
+A **range** may carry its own `grade` and `crop`, overriding the EDL-wide value:
+
+- `grade` per range — sources shot in one session still drift in white balance when the camera restarts, and a single EDL-wide grade has nowhere to express that difference. Measure a fixed patch (a cheek, a wall) with `signalstats` on each source and correct toward the reference.
+- `crop` per range — reframing that only applies to one source. Applied before the scale (Hard Rule 15).
+- `audio` — a fixed capture chain (highpass, EQ, gate, compressor) run before the 30ms fades. EDL-wide, or per range; `""` on a range turns it off. No `loudnorm` here (Hard Rule 14).
 
 ## Memory — `project.md`
 
@@ -340,3 +353,7 @@ Things that consistently fail regardless of style:
 - **Editing before confirming the strategy.** Never.
 - **Re-transcribing cached sources.** Immutable outputs of immutable inputs.
 - **Assuming what kind of video it is.** Look first, ask second, edit last.
+- **Trusting a clips directory because the filenames line up.** They only carry an index and a source name. (Hard Rule 13.)
+- **Checking that captions are *present* instead of reading them.** A band with bright pixels in it passed QC once while 76% of the speech carried the wrong line. Compare the rendered text against the transcript, and sweep the whole timeline — the failure is usually in the tail.
+- **Putting `loudnorm` in the per-segment chain.** (Hard Rule 14.)
+- **Breaking subtitle lines on character count.** In CJK that splits words that must stay together. Score candidate break points on grammar and penalize over-length rather than rejecting it — rejecting produces one 41-character line.

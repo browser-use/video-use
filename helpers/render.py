@@ -140,6 +140,7 @@ def is_hdr_source(video: Path) -> bool:
              "-show_entries", "stream=color_transfer",
              "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
             capture_output=True, text=True, check=True,
+            encoding="utf-8", errors="replace",
         )
         return out.stdout.strip() in HDR_TRANSFERS
     except subprocess.CalledProcessError:
@@ -155,6 +156,7 @@ def is_portrait_source(video: Path) -> bool:
              "stream=width,height:stream_side_data=rotation",
              "-of", "json", str(video)],
             capture_output=True, text=True, check=True,
+            encoding="utf-8", errors="replace",
         )
         streams = json.loads(out.stdout).get("streams") or []
         if not streams:
@@ -254,15 +256,34 @@ def extract_segment(
     preview: bool = False,
     draft: bool = False,
     rate: str | None = None,
+    speed: float = 1.0,
+    target_w: int = 1920,
+    audio_filter: str = "",
+    crop: str = "",
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
-    `-ss` before `-i` for fast accurate seeking. Scale to 1080p from 4K.
-    Portrait sources (height > width) are scaled by height to preserve orientation.
+    `audio_filter` runs before the fades — a fixed capture chain (highpass, EQ,
+    gate, compressor) belongs here. Do NOT put `loudnorm` in it: these segments
+    are normalized independently, so a quiet one would be lifted to match a loud
+    one and the relative levels between segments would be destroyed. Loudness is
+    handled once, two-pass, on the finished cut.
+
+    `-ss` before `-i` for fast accurate seeking. Scale to `target_w` (1080p by
+    default; set `width` on the EDL to keep a 4K source at full size). Portrait
+    sources (height > width) are scaled by height to preserve orientation.
+    Draft mode always scales to 1280 regardless of `target_w` — it's a fast
+    cut-point check, not a resolution preview. `crop` is applied before the
+    scale.
+
+    `speed` time-remaps the segment (1.1 = 10% faster) via setpts/atempo —
+    pitch is preserved (atempo time-stretches, it doesn't resample). Output
+    duration becomes `duration / speed`; the audio fades below are timed
+    against that post-atempo length, not the source `duration`.
 
     Quality ladder:
-      - final (default): 1080p libx264 fast CRF 20
-      - preview:         1080p libx264 medium CRF 22 (evaluable for QC)
+      - final (default): target_w libx264 fast CRF 20
+      - preview:         target_w libx264 medium CRF 22 (evaluable for QC)
       - draft:           720p libx264 ultrafast CRF 28 (cut-point check only)
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -271,19 +292,35 @@ def extract_segment(
     if draft:
         scale = "scale=-2:1280" if portrait else "scale=1280:-2"
     else:
-        scale = "scale=-2:1920" if portrait else "scale=1920:-2"
+        scale = f"scale=-2:{target_w}" if portrait else f"scale={target_w}:-2"
 
     vf_parts: list[str] = []
     if is_hdr_source(source):
         vf_parts.append(TONEMAP_CHAIN)
+    # Crop before scale. Crop values are measured against the source's own
+    # resolution, so running them after the scale would reframe a different
+    # picture — a 4K-measured 3400x1912 crop does not even fit a 1920 frame.
+    if crop:
+        vf_parts.append(f"crop={crop}")
     vf_parts.append(scale)
     if grade_filter:
         vf_parts.append(grade_filter)
+    if speed != 1.0:
+        vf_parts.append(f"setpts=PTS/{speed}")
     vf = ",".join(vf_parts)
 
-    # 30ms audio fades at both edges (Rule 3) — prevent pops
-    fade_out_start = max(0.0, duration - 0.03)
-    af = f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+    # 30ms audio fades at both edges (Rule 3) — prevent pops. Computed against
+    # the post-speed output length so they still land at the true out-point.
+    out_duration = duration / speed if speed != 1.0 else duration
+    fade_out_start = max(0.0, out_duration - 0.03)
+    af_parts = []
+    if audio_filter:
+        af_parts.append(audio_filter)      # capture chain runs on the raw audio
+    if speed != 1.0:
+        af_parts.append(f"atempo={speed}")
+    af_parts.append("afade=t=in:st=0:d=0.03")
+    af_parts.append(f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
+    af = ",".join(af_parts)
 
     if draft:
         preset, crf = "ultrafast", "28"
@@ -301,8 +338,8 @@ def extract_segment(
     cmd = [
         "ffmpeg", "-y",
         "-ss", f"{seg_start:.3f}",
-        "-i", str(source),
         "-t", f"{duration:.3f}",
+        "-i", str(source),
         "-vf", vf,
         "-af", af,
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
@@ -330,6 +367,11 @@ def extract_all_segments(
     """
     resolved = resolve_grade_filter(edl.get("grade"))
     is_auto = resolved == "__AUTO__"
+    # --preview stays 1080p regardless of the EDL's target — it's for fast QC,
+    # not a resolution preview. Draft's 1280 override lives in extract_segment()
+    # itself; mirror that here so preview can't silently inherit a 4K target
+    # and stop being fast.
+    width = 1920 if preview else int(edl.get("width", 1920))
     clips_dir = edit_dir / (
         "clips_draft" if draft else ("clips_preview" if preview else "clips_graded")
     )
@@ -337,6 +379,8 @@ def extract_all_segments(
 
     ranges = edl["ranges"]
     sources = edl["sources"]
+    edl_audio = edl.get("audio", "")
+    edl_crop = edl.get("crop", "")
 
     # Resolve ONE output frame rate for the entire render and apply it to every
     # segment. The lossless concat (Rule 2, `-c copy`) requires all segments to
@@ -364,17 +408,38 @@ def extract_all_segments(
         duration = end - start
         out_path = clips_dir / f"seg_{i:02d}_{src_name}.mp4"
 
-        if is_auto:
+        # A range may override the EDL-wide grade. Sources shot in one session can
+        # still drift in white balance (camera restart), so a per-range correction
+        # is the only place that difference can be expressed.
+        if "grade" in r:
+            seg_filter = resolve_grade_filter(r["grade"])
+        elif is_auto:
             seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
         else:
             seg_filter = resolved
+        seg_audio = r.get("audio", edl_audio)
+        seg_crop = r.get("crop", edl_crop)
 
+        speed = float(r.get("speed", 1.0))
         note = r.get("beat") or r.get("note") or ""
-        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
-        if is_auto:
+        speed_note = f"  x{speed}" if speed != 1.0 else ""
+        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{speed_note}")
+        if is_auto or "grade" in r:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate)
+        extract_segment(src_path, start, duration, seg_filter, out_path,
+                        preview=preview, draft=draft, rate=out_rate,
+                        speed=speed, target_w=width,
+                        audio_filter=seg_audio, crop=seg_crop)
         seg_paths.append(out_path)
+
+    # Stamp the folder with the ranges we just extracted. Segment filenames carry
+    # only an index and a source name, so a leftover render of a *different* EDL
+    # can match by name and hand back the wrong durations to anything that
+    # measures these files. Consumers compare this list before trusting them.
+    (clips_dir / "_ranges.json").write_text(
+        json.dumps([{"source": r["source"], "start": r["start"], "end": r["end"]}
+                    for r in ranges], ensure_ascii=False),
+        encoding="utf-8")
 
     return seg_paths
 
@@ -386,7 +451,9 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     """Lossless concat via the concat demuxer. No re-encode."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
-    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    concat_list.write_text(
+        "".join(f"file '{p.resolve()}'\n" for p in segment_paths), encoding="utf-8"
+    )
 
     cmd = [
         "ffmpeg", "-y",
@@ -490,7 +557,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             seg_offset += seg_duration
             continue
 
-        transcript = json.loads(tr_path.read_text())
+        transcript = json.loads(tr_path.read_text(encoding="utf-8"))
         words_in_seg = _words_in_range(transcript, seg_start, seg_end)
 
         for chunk in chunk_words(words_in_seg):
@@ -517,7 +584,7 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
         lines.append(f"{_srt_timestamp(a)} --> {_srt_timestamp(b)}")
         lines.append(t)
         lines.append("")
-    out_path.write_text("\n".join(lines))
+    out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"master SRT → {out_path.name} ({len(entries)} cues)")
 
 
@@ -546,7 +613,11 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
         "-af", filter_str,
         "-vn", "-f", "null", "-",
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # ffmpeg writes the input path into stderr as UTF-8; decoding it with the
+    # locale default (cp949 on Korean Windows) raises and leaves stderr None.
+    proc = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     # loudnorm prints the JSON to stderr at the end of the run
     stderr = proc.stderr
 
@@ -674,7 +745,16 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        # Backslashes are consumed by the filtergraph parser, so a Windows path
+        # arrives at libass with its separators stripped ("C:UsersnameClips").
+        # Forward slashes work on every platform; on POSIX this replace is a
+        # no-op.
+        subs_abs = (
+            str(subtitles_path.resolve())
+            .replace("\\", "/")
+            .replace(":", r"\:")
+            .replace("'", r"\'")
+        )
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )
@@ -752,7 +832,7 @@ def main() -> None:
     if not edl_path.exists():
         sys.exit(f"edl not found: {edl_path}")
 
-    edl = json.loads(edl_path.read_text())
+    edl = json.loads(edl_path.read_text(encoding="utf-8"))
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
 
