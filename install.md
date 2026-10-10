@@ -1,6 +1,6 @@
 ---
 name: video-use-install
-description: Install video-use into the current agent (Claude Code, Codex, Hermes, Openclaw, etc.) and wire up ffmpeg + the ElevenLabs API key so the user can start editing immediately.
+description: Install video-use into the current agent (Claude Code, Codex, Hermes, Openclaw, etc.) and wire up ffmpeg plus a transcription backend — local whisper-cli (default, free) or the ElevenLabs API key — so the user can start editing immediately.
 ---
 
 # video-use install
@@ -15,7 +15,7 @@ Three things must exist on this machine:
 
 1. The `video-use` repo cloned somewhere stable.
 2. `ffmpeg` on `$PATH` (plus optional `yt-dlp` for online sources).
-3. An ElevenLabs API key in `.env` at the repo root (for Scribe transcription).
+3. A transcription backend: local `whisper-cli` + a model (free, default), **or** an ElevenLabs API key in `.env` at the repo root (only needed for speaker diarization / audio events).
 
 And one thing must be true about the current agent:
 
@@ -23,7 +23,7 @@ And one thing must be true about the current agent:
 
 ## Install prompt contract
 
-- Do everything yourself. Only ask the user for things you cannot generate — the ElevenLabs API key, and confirmation before `brew install`.
+- Do everything yourself. Only ask the user for things you cannot generate — a transcription backend choice, an ElevenLabs API key if they want Scribe, and confirmation before `brew install`.
 - Prefer a stable clone path like `~/Developer/video-use` (not `/tmp`, not `~/Downloads`).
 - The skill references helpers by bare name (`transcribe.py`, `render.py`). That works because SKILL.md and `helpers/` ship together — keep them as siblings when you register the skill.
 - After install, verify by running one real command against one real file. Don't declare success on file-existence checks alone.
@@ -89,9 +89,38 @@ Figure out which agent you are running under, and register once. A symlink of th
 
 If you can't tell which agent you're in, ask the user once: "which agent am I running under — Claude Code, Codex, or something else?" Then pick the right target.
 
-### 5. ElevenLabs API key
+### 5. Transcription backend
 
-Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
+Transcription has two backends. Pick one and configure only that one.
+
+**A — Local `whisper-cli` (whisper.cpp). Default when a repo-level `CLAUDE.md` pins it.** Free, offline, no key, no quota.
+
+1. Install it and get a model:
+
+    ```bash
+    # macOS (Homebrew builds the CLI)
+    brew install whisper-cpp
+    # Fetch a model into the conventional location
+    mkdir -p ~/whisper-models
+    curl -L -o ~/whisper-models/ggml-large-v3-turbo.bin \
+      https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+    ```
+
+2. If the model lives somewhere else, record the path — never hardcode it in a committed file:
+
+    ```bash
+    printf 'WHISPER_MODEL=%s\n' "$MODEL_PATH" >> ~/Developer/video-use/.env
+    chmod 600 ~/Developer/video-use/.env
+    ```
+
+3. Verify with a real file (cheap, quota-free):
+
+    ```bash
+    WHISPER_MODEL="${WHISPER_MODEL:-$HOME/whisper-models/ggml-large-v3-turbo.bin}"
+    test -x "$(command -v whisper-cli)" && test -f "$WHISPER_MODEL" && echo "whisper OK"
+    ```
+
+**B — ElevenLabs Scribe.** Needed only when the session requires speaker diarization or audio events (`(laughter)`, `(applause)`, `(sigh)`); local whisper produces neither. Without a key, nothing transcribes.
 
 1. Check existing state in this order and stop at the first hit:
 
@@ -102,9 +131,9 @@ Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
     grep -q '^ELEVENLABS_API_KEY=..' ~/Developer/video-use/.env 2>/dev/null && echo "dotenv"
     ```
 
-2. If neither is set, ask the user exactly once:
+2. If neither is set, and only if backend B is actually in use, ask the user exactly once:
 
-    > I need an ElevenLabs API key for transcription (word-level timestamps, speaker diarization, filler tagging). Grab one at https://elevenlabs.io/app/settings/api-keys and paste it here — I'll write it to `~/Developer/video-use/.env`. Or if you already have it exported as `ELEVENLABS_API_KEY`, say "use env" and I'll skip.
+    > I need an ElevenLabs API key for transcription (word-level timestamps, speaker diarization, filler tagging). Grab one at https://elevenlabs.io/app/settings/api-keys and paste it here — I'll write it to `~/Developer/video-use/.env`. Or if you already have it exported as `ELEVENLABS_API_KEY`, say "use env" and I'll skip. If you'd rather stay local and free, say "local whisper" and I'll set that up instead.
 
     When the user pastes a key, write it to `~/Developer/video-use/.env`:
 
@@ -125,6 +154,8 @@ Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
 
     `200` means the key works. `401` means the user pasted a wrong/expired key — ask once more and stop. Anything else (network, 5xx), move on and verify during first real transcription.
 
+> Never install or configure both speculatively. Never spend the user's Scribe credits when local whisper satisfies the session.
+
 ### 6. Verify end-to-end
 
 Run one real thing. Prefer the lightest verification that still proves the pipeline is wired up:
@@ -134,7 +165,7 @@ python ~/Developer/video-use/helpers/timeline_view.py --help >/dev/null && echo 
 ffprobe -version | head -1
 ```
 
-Full transcription test is optional at install time — it burns Scribe credits. Better to wait until the user hands you their first clip.
+Full transcription test is optional at install time. On local whisper it's free but slow; on Scribe it burns real credits. Better to wait until the user hands you their first clip.
 
 ### 7. Hand off
 
@@ -143,7 +174,8 @@ Tell the user, in one short message:
 - Where the skill is installed (`~/Developer/video-use`).
 - That they should `cd` into their footage folder and start their agent there (e.g. `claude`).
 - That a good first message is: *"edit these into a launch video"* or *"inventory these takes and propose a strategy."*
-- That all outputs land in `<videos_dir>/edit/` — the repo stays clean.
+- That outputs land in `<videos_dir>/edit/` — the repo stays clean.
+- Which transcription backend is installed (local `whisper-cli` with its `WHISPER_MODEL` path, or Scribe).
 
 ## Keeping the skill current
 
@@ -158,5 +190,5 @@ Tell the user, in one short message:
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
 - Node.js/npm are only needed for HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
 - HyperFrames, Remotion, and Manim are optional animation engines. Don't install or prefer one globally during setup; pick the engine per animation slot in `SKILL.md`. HyperFrames can run through `npx --yes hyperframes ...` in the slot directory. Remotion can be scaffolded with `npx create-video@latest` or installed inside the slot before rendering.
-- Never run transcription as part of install verification unless the user explicitly asks — Scribe costs real money.
+- Never run transcription as part of install verification unless the user explicitly asks. On Scribe it costs real money; on local whisper it's just slow.
 - If the user is on Linux without a package manager Claude recognizes, print the manual `ffmpeg` install URL and wait rather than guessing.

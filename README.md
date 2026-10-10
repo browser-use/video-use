@@ -27,10 +27,10 @@ Paste into Claude Code, Codex, Hermes, Openclaw, or any agent with shell access:
 ```text
 Set up https://github.com/browser-use/video-use for me.
 
-Read install.md first to install this repo, wire up ffmpeg, register the skill with whichever agent you're running under, and set up the ElevenLabs API key — ask me to paste it when you need it. Then read SKILL.md for daily usage, and always read helpers/ because that's where the editing scripts live. After install, don't transcribe anything on your own — just tell me it's ready and wait for me to drop footage into a folder.
+Read install.md first to install this repo, wire up ffmpeg, set up a transcription backend (local whisper-cli, or the ElevenLabs API key if I need diarization), register the skill with whichever agent you're running under, and ask me to paste an API key when you need it. Then read SKILL.md for daily usage, and always read helpers/ because that's where the editing scripts live. After install, don't transcribe anything on your own — just tell me it's ready and wait for me to drop footage into a folder.
 ```
 
-The agent handles the clone, dependencies, skill registration, and prompts you once for your ElevenLabs API key (grab one at [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys)).
+The agent handles the clone, dependencies, skill registration, and transcription setup. It only prompts you for an API key if you choose the hosted ElevenLabs option (grab one at [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys)); local whisper-cli is free and needs no key.
 
 Then point your agent at a folder of raw takes:
 
@@ -63,9 +63,15 @@ uv sync                         # or: pip install -e .
 brew install ffmpeg             # required
 brew install yt-dlp             # optional, for downloading online sources
 
-# 3. Add your ElevenLabs API key
-cp .env.example .env
-$EDITOR .env                    # ELEVENLABS_API_KEY=...
+# 3. Pick a transcription backend — local whisper-cli is free and needs no key
+brew install whisper-cpp                 # local, offline, default
+curl -L -o ~/whisper-models/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+
+# …or use hosted ElevenLabs Scribe instead (needed only for speaker
+# diarization and audio events, which local whisper does not produce):
+# cp .env.example .env
+# $EDITOR .env                           # ELEVENLABS_API_KEY=...
 ```
 
 ## How it works
@@ -76,7 +82,7 @@ The LLM never watches the video. It **reads** it — through two layers that tog
   <img src="static/timeline-view.svg" alt="timeline_view composite — filmstrip + speaker track + waveform + word labels + silence-gap cut candidates" width="100%">
 </p>
 
-**Layer 1 — Audio transcript (always loaded).** One ElevenLabs Scribe call per source gives word-level timestamps, speaker diarization, and audio events (`(laughter)`, `(applause)`, `(sigh)`). All takes pack into a single ~12KB `takes_packed.md` — the LLM's primary reading view.
+**Layer 1 — Audio transcript (always loaded).** One transcription call per source gives word-level timestamps. The default backend is local `whisper-cli` (free, offline); hosted ElevenLabs Scribe additionally provides speaker diarization and audio events (`(laughter)`, `(applause)`, `(sigh)`). All takes pack into a single ~12KB `takes_packed.md` — the LLM's primary reading view.
 
 ```
 ## C0103  (duration: 43.0s, 8 phrases)
