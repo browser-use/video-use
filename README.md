@@ -55,7 +55,10 @@ If you'd rather do it by hand:
 # 1. Clone and symlink into your agent's skills directory
 git clone https://github.com/browser-use/video-use ~/Developer/video-use
 ln -sfn ~/Developer/video-use ~/.claude/skills/video-use        # Claude Code
-# ln -sfn ~/Developer/video-use ~/.codex/skills/video-use       # Codex
+
+# Codex
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+ln -sfn ~/Developer/video-use "${CODEX_HOME:-$HOME/.codex}/skills/video-use"
 
 # 2. Install deps
 cd ~/Developer/video-use
