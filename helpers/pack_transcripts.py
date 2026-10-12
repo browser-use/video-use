@@ -20,6 +20,16 @@ import json
 import sys
 from pathlib import Path
 
+# Windows consoles default to cp1252, which raises UnicodeEncodeError on the
+# Unicode arrows/em-dashes in the status prints below. Force UTF-8 on stdout/
+# stderr so this helper behaves identically on Windows, macOS, and Linux.
+# No-op where the stream is already UTF-8 or can't be reconfigured.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 def format_time(seconds: float) -> str:
     """Format a time in seconds as "NNN.NN" with fixed 6-char width for alignment."""
