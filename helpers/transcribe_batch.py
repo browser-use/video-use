@@ -35,7 +35,7 @@ def find_videos(videos_dir: Path) -> list[Path]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Parallel batch transcription of a videos directory")
+    ap = argparse.ArgumentParser(description="Parallel batch transcription of a video directory")
     ap.add_argument("videos_dir", type=Path, help="Directory containing source videos")
     ap.add_argument(
         "--edit-dir",
