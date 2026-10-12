@@ -34,11 +34,38 @@ from PIL import Image, ImageDraw, ImageFont
 # -------- Frame extraction ---------------------------------------------------
 
 
+def probe_duration(video: Path) -> float | None:
+    """Container duration in seconds, or None when ffprobe cannot tell."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error",
+             "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            capture_output=True, text=True, check=True,
+        )
+        return float(out.stdout.strip())
+    except (subprocess.CalledProcessError, ValueError):
+        return None
+
+
 def extract_frames(video: Path, start: float, end: float, n: int, dest_dir: Path) -> list[Path]:
     """Extract N frames evenly spaced across [start, end]. Returns paths in order."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     if n < 1:
         n = 1
+
+    # Seeking at or past the last frame makes ffmpeg write nothing while still
+    # exiting 0, so check=True cannot catch it and the caller dies later on a
+    # missing JPEG. Keep every requested timestamp inside the decodable range.
+    last_frame_epsilon = 0.05
+    duration = probe_duration(video)
+    if duration is not None:
+        latest = max(0.0, duration - last_frame_epsilon)
+        start = min(start, latest)
+        end = min(end, latest)
+        if end < start:
+            start, end = end, end
+
     if n == 1:
         times = [(start + end) / 2.0]
     else:
@@ -58,6 +85,12 @@ def extract_frames(video: Path, start: float, end: float, n: int, dest_dir: Path
             str(out),
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not out.exists():
+            raise RuntimeError(
+                f"ffmpeg produced no frame at {t:.3f}s of {video} "
+                f"(duration {duration if duration is not None else 'unknown'}). "
+                "Pick a range that ends before the last frame."
+            )
         paths.append(out)
     return paths
 
