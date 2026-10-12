@@ -39,8 +39,6 @@ cd /path/to/your/videos
 claude    # or codex, hermes, etc.
 ```
 
-For always-on editing from your own VPS or Telegram, run the agent through [Browser Use Box](https://browser-use.com/bux). [Watch the 15-second demo](https://www.tiktok.com/@browser_use/video/7639824093721758989).
-
 And in the session:
 
 > edit these into a launch video
