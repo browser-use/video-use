@@ -22,10 +22,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import subprocess
 import sys
+import tempfile
 from fractions import Fraction
 from pathlib import Path
 
@@ -186,6 +188,118 @@ def is_portrait_source(video: Path) -> bool:
         return False
 
 
+def display_dims(video: Path) -> tuple[int, int]:
+    """Displayed (width, height) of a source, accounting for rotation side-data.
+
+    ffmpeg autorotates display-matrix side data before filters run, so these are
+    the dimensions the filter chain actually sees.
+    """
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height:stream_side_data=rotation",
+         "-of", "json", str(video)],
+        capture_output=True, text=True, check=True,
+    )
+    stream = (json.loads(out.stdout).get("streams") or [{}])[0]
+    w, h = int(stream["width"]), int(stream["height"])
+    rotation = 0
+    for side_data in stream.get("side_data_list") or []:
+        if side_data.get("rotation") is not None:
+            rotation = side_data["rotation"]
+            break
+    if int(round(float(rotation))) % 360 in (90, 270):
+        w, h = h, w
+    return w, h
+
+
+def scale_expr(target_h: int, portrait: bool) -> str:
+    """The aspect-preserving scale filter this module applies to every segment."""
+    if portrait:
+        # For portrait the long edge is the height; keep the same pixel count.
+        return f"scale=-2:{round(target_h * 16 / 9 / 2) * 2}"
+    return f"scale=-2:{target_h}"
+
+
+@functools.lru_cache(maxsize=64)
+def probe_scaled_dims(video: Path, target_h: int, portrait: bool) -> tuple[int, int]:
+    """The exact (w, h) a source lands at after `scale_expr`, measured not guessed.
+
+    Every segment must end at the same dimensions or the `-c copy` concat
+    (Rule 2) fails, and the numeric `zoom` crop is computed against these. We
+    therefore ask ffmpeg rather than reimplementing its rounding: `-2` rounds to
+    even *and* accounts for sample aspect ratio, so arithmetic over coded
+    dimensions would silently diverge on any anamorphic source.
+
+    The measured value is then used as an explicit scale target for every
+    segment, so zoomed and unzoomed siblings match by construction.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        probe_png = Path(tmp) / "scaled.png"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-v", "error", "-y", "-i", str(video),
+                 "-vf", scale_expr(target_h, portrait),
+                 "-frames:v", "1", str(probe_png)],
+                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            )
+            out = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=width,height", "-of", "csv=p=0:nk=1",
+                 str(probe_png)],
+                capture_output=True, text=True, check=True,
+            )
+            w_str, h_str = out.stdout.strip().split(",")
+            return int(w_str), int(h_str)
+        except (subprocess.CalledProcessError, ValueError, OSError) as exc:
+            # Fall back to arithmetic over displayed dimensions. Correct for
+            # square-pixel sources, which is everything a camera produces.
+            w, h = display_dims(video)
+            out_h = round(target_h * 16 / 9 / 2) * 2 if portrait else target_h
+            out_w = round(w / h * out_h / 2) * 2
+            print(f"  warning: could not measure scaled dims for {video.name} "
+                  f"({type(exc).__name__}); falling back to {out_w}x{out_h}")
+            return out_w, out_h
+
+
+def even_positive_height(value: str) -> int:
+    """argparse type for --height: a positive, even pixel height.
+
+    yuv420p needs even dimensions, so an odd or non-positive height would only
+    surface as an ffmpeg failure partway through extraction. Reject it up front.
+    """
+    try:
+        height = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"height must be an integer, got {value!r}") from None
+    if height <= 0:
+        raise argparse.ArgumentTypeError(f"height must be positive, got {height}")
+    if height % 2:
+        raise argparse.ArgumentTypeError(
+            f"height must be even (yuv420p requires it), got {height}; try {height + 1}"
+        )
+    return height
+
+
+def crf_value(value: str) -> str:
+    """argparse type for --crf. x264 accepts fractional CRF, so 16.5 is valid.
+
+    Returned as a string because that is what the ffmpeg command line wants;
+    main() parses it back to a float to derive the composite CRF.
+    """
+    try:
+        crf = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"crf must be a number, got {value!r}") from None
+    if not 0.0 <= crf <= 51.0:
+        raise argparse.ArgumentTypeError(f"crf must be within x264's 0-51 range, got {crf}")
+    return value
+
+
+def format_crf(crf: float) -> str:
+    """Render a CRF for the ffmpeg command line without a spurious '.0'."""
+    return str(int(crf)) if crf == int(crf) else f"{crf:g}"
+
+
 def parse_fps(value: str) -> str:
     """Validate and canonicalize an ffmpeg frame rate."""
     text = value.strip()
@@ -254,6 +368,12 @@ def extract_segment(
     preview: bool = False,
     draft: bool = False,
     rate: str | None = None,
+    extra_vf: str = "",
+    audio_prefilter: str = "",
+    height: int | None = None,
+    crf: str | None = None,
+    zoom: float = 1.0,
+    zoom_x: float = 0.45,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -268,10 +388,14 @@ def extract_segment(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     portrait = is_portrait_source(source)
-    if draft:
-        scale = "scale=-2:1280" if portrait else "scale=1280:-2"
-    else:
-        scale = "scale=-2:1920" if portrait else "scale=1920:-2"
+    # Explicit height wins; otherwise the mode default (720p draft, else 1080p).
+    target_h = height if height is not None else (720 if draft else 1080)
+    # Scale to explicitly measured dimensions rather than letting `-2` derive the
+    # width per invocation: a zoomed segment has a cropped (and therefore slightly
+    # different) input aspect, so `-2` could hand it a width 2px off its unzoomed
+    # siblings and break the `-c copy` concat (Rule 2).
+    out_w, out_h = probe_scaled_dims(source, target_h, portrait)
+    scale = f"scale={out_w}:{out_h}"
 
     vf_parts: list[str] = []
     if is_hdr_source(source):
@@ -279,18 +403,38 @@ def extract_segment(
     vf_parts.append(scale)
     if grade_filter:
         vf_parts.append(grade_filter)
+    # Per-segment reframe (push-in to disguise a jump cut on a static camera).
+    # Expressed as a plain number so one EDL stays correct at any output
+    # resolution: crop to 1/zoom of the frame, then scale back to the exact
+    # frame size. The scale-back is mandatory - every segment must share
+    # dimensions or the `-c copy` concat (Rule 2) fails.
+    if zoom and abs(zoom - 1.0) > 1e-6:
+        if zoom < 1.0:
+            raise ValueError(f"zoom must be >= 1.0 (got {zoom}); it crops in, never out")
+        cw = max(2, (int(out_w / zoom) // 2) * 2)
+        ch = max(2, (int(out_h / zoom) // 2) * 2)
+        cx = int((out_w - cw) * min(max(zoom_x, 0.0), 1.0))
+        cy = (out_h - ch) // 2
+        vf_parts.append(f"crop={cw}:{ch}:{cx}:{cy},scale={out_w}:{out_h}")
+    if extra_vf:
+        vf_parts.append(extra_vf)
     vf = ",".join(vf_parts)
 
     # 30ms audio fades at both edges (Rule 3) — prevent pops
     fade_out_start = max(0.0, duration - 0.03)
     af = f"afade=t=in:st=0:d=0.03,afade=t=out:st={fade_out_start:.3f}:d=0.03"
+    # Denoise/EQ runs BEFORE the fades so the 30ms fades stay on the true
+    # segment edges (Rule 3).
+    if audio_prefilter:
+        af = f"{audio_prefilter},{af}"
 
     if draft:
-        preset, crf = "ultrafast", "28"
+        preset, default_crf = "ultrafast", "28"
     elif preview:
-        preset, crf = "medium", "22"
+        preset, default_crf = "medium", "22"
     else:
-        preset, crf = "fast", "20"
+        preset, default_crf = "slow", "16"
+    crf = crf if crf is not None else default_crf
 
     # Frame rate: use the rate the caller resolved once for the whole render
     # (every segment must share it — concat -c copy in Rule 2 requires a uniform
@@ -320,6 +464,8 @@ def extract_all_segments(
     preview: bool,
     draft: bool = False,
     fps: str | None = None,
+    height: int | None = None,
+    crf: str | None = None,
 ) -> list[Path]:
     """Extract every EDL range into edit_dir/clips_graded/seg_NN.mp4.
     Returns the ordered list of segment paths.
@@ -330,6 +476,9 @@ def extract_all_segments(
     """
     resolved = resolve_grade_filter(edl.get("grade"))
     is_auto = resolved == "__AUTO__"
+    audio_prefilter = edl.get("audio_filter") or ""
+    if audio_prefilter:
+        print(f"audio prefilter (pre-fade): {audio_prefilter}")
     clips_dir = edit_dir / (
         "clips_draft" if draft else ("clips_preview" if preview else "clips_graded")
     )
@@ -373,7 +522,17 @@ def extract_all_segments(
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}")
         if is_auto:
             print(f"        grade: {seg_filter or '(none)'}")
-        extract_segment(src_path, start, duration, seg_filter, out_path, preview=preview, draft=draft, rate=out_rate)
+        seg_vf = r.get("filter") or ""
+        seg_zoom = float(r.get("zoom") or 1.0)
+        seg_zoom_x = float(r.get("zoom_x", 0.45))
+        if seg_zoom != 1.0:
+            print(f"        zoom:  {seg_zoom:.3f}x  (x-bias {seg_zoom_x})")
+        if seg_vf:
+            print(f"        vf:    {seg_vf}")
+        extract_segment(src_path, start, duration, seg_filter, out_path,
+                        preview=preview, draft=draft, rate=out_rate,
+                        extra_vf=seg_vf, audio_prefilter=audio_prefilter,
+                        height=height, crf=crf, zoom=seg_zoom, zoom_x=seg_zoom_x)
         seg_paths.append(out_path)
 
     return seg_paths
@@ -636,6 +795,8 @@ def build_final_composite(
     subtitles_path: Path | None,
     out_path: Path,
     edit_dir: Path,
+    crf: str = "18",
+    preset: str = "fast",
 ) -> None:
     """Final pass: base → overlays (PTS-shifted) → subtitles LAST → out.
 
@@ -695,7 +856,7 @@ def build_final_composite(
         "-filter_complex", filter_complex,
         "-map", out_label,
         "-map", "0:a",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        "-c:v", "libx264", "-preset", preset, "-crf", crf,
         "-pix_fmt", "yuv420p",
         "-c:a", "copy",
         "-movflags", "+faststart",
@@ -739,6 +900,23 @@ def main() -> None:
         help="Skip audio loudness normalization. Default is on (-14 LUFS, -1 dBTP, LRA 11).",
     )
     ap.add_argument(
+        "--height",
+        type=even_positive_height,
+        default=None,
+        help="Output height in pixels (e.g. 2160, 1440, 1080). Default 1080 "
+             "(720 with --draft). Width follows the source aspect. Delivering at "
+             "the source height skips the downscale generation entirely.",
+    )
+    ap.add_argument(
+        "--crf",
+        type=crf_value,
+        default=None,
+        help="x264 CRF for the per-segment extract - the FIRST of two video "
+             "encodes, so it sets the quality ceiling. Lower is better. Default "
+             "16 for final, 22 for --preview, 28 for --draft. The overlay/subtitle "
+             "composite encode is derived as (crf - 2).",
+    )
+    ap.add_argument(
         "--fps",
         type=parse_fps,
         default=None,
@@ -758,8 +936,16 @@ def main() -> None:
 
     # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
     segment_paths = extract_all_segments(
-        edl, edit_dir, preview=args.preview, draft=args.draft, fps=args.fps
+        edl, edit_dir, preview=args.preview, draft=args.draft, fps=args.fps,
+        height=args.height, crf=args.crf,
     )
+    # The composite is a SECOND video generation on top of the extract. Keep its
+    # CRF below the extract's so it adds as little further loss as possible.
+    gen1_crf = float(args.crf) if args.crf is not None else (
+        28.0 if args.draft else 22.0 if args.preview else 16.0
+    )
+    gen2_crf = format_crf(max(10.0, gen1_crf - 2))
+    gen2_preset = "ultrafast" if args.draft else ("fast" if args.preview else "slow")
 
     # 2. Concat → base
     if args.draft:
@@ -784,11 +970,13 @@ def main() -> None:
     overlays = edl.get("overlays") or []
     if args.no_loudnorm:
         # Composite directly to final output
-        build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
+        build_final_composite(base_path, overlays, subs_path, out_path, edit_dir,
+                              crf=gen2_crf, preset=gen2_preset)
     else:
         # Composite to a temp file, then run loudnorm → final output
         tmp_composite = out_path.with_suffix(".prenorm.mp4")
-        build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
+        build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir,
+                              crf=gen2_crf, preset=gen2_preset)
         print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
         apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft)
         tmp_composite.unlink(missing_ok=True)
