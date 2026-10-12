@@ -35,6 +35,14 @@ import tempfile
 from pathlib import Path
 
 
+# Windows consoles default to cp1252, which cannot encode the '→' / '≈' / '±'
+# characters used in the status output below — printing one raises
+# UnicodeEncodeError and kills the run. Force UTF-8 on the streams we own.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 PRESETS: dict[str, str] = {
     # Subtle baseline — barely perceptible cleanup. No color shift.
     # Use when auto-analysis isn't available or when you want a safe floor.
@@ -101,15 +109,24 @@ def _sample_frame_stats(
         metadata_path = f.name
 
     try:
+        # `metadata=print:file=...` is a FILTER argument: ':' separates options
+        # and '\' escapes. An absolute Windows path (C:\Users\...) is therefore
+        # mangled by the filter parser ("No option name near ..."), and auto-grade
+        # dies with CalledProcessError. Passing a bare filename plus cwd sidesteps
+        # filter-arg escaping entirely and behaves the same on every platform.
+        meta_file = Path(metadata_path)
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats",
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={meta_file.name}",
             "-f", "null", "-",
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            cmd, check=True, cwd=str(meta_file.parent),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
 
         # Parse signalstats metadata. Signalstats reports values in the NATIVE
         # bit depth of the decoded frame (8-bit → 0-255, 10-bit → 0-1023). We
