@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -75,6 +76,44 @@ def get_preset(name: str) -> str:
 # -------- Auto grade (data-driven, per-clip) --------------------------------
 
 
+def _source_bit_depth(video: Path) -> int:
+    """True luma bit depth of the source, derived from its pixel format.
+
+    `signalstats`' YBITDEPTH cannot be used for this. That field is the popcount
+    of the bitwise OR of every sample value in the frame, so it describes the
+    frame's content, not the format. Measured against synthetic sources:
+
+        flat black  (Y=16  = 0b00010000) -> YBITDEPTH 1
+        flat white  (Y=235 = 0b11101011) -> YBITDEPTH 6
+        flat grey   (Y=126 = 0b01111110) -> YBITDEPTH 6
+        192..193 gradient (OR = 0b11000001) -> YBITDEPTH 3
+        full-range testsrc2                 -> YBITDEPTH 8
+
+    Normalising by 2**that - 1 therefore inflates flat frames enormously: pure
+    white would read as 235/63 = 3.73 ("373% brightness") and pure black as
+    16/1 = 16.0. On dark or flat footage the auto-grade then corrects hard in the
+    wrong direction. The pixel format is the only reliable source of the depth.
+    """
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=pix_fmt",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(video),
+    ]
+    try:
+        pix_fmt = subprocess.check_output(cmd).decode().strip().splitlines()[0]
+    except Exception:
+        return 8
+
+    # yuv420p10le -> 10, p010le -> 10, gray16le -> 16, yuv420p -> 8, rgb24 -> 8
+    name = re.sub(r"(le|be)$", "", pix_fmt.strip())
+    m = re.search(r"p(\d+)$", name) or re.search(r"gray(\d+)$", name)
+    if not m:
+        return 8
+    depth = int(m.group(1))
+    return depth if 8 <= depth <= 16 else 8
+
+
 def _sample_frame_stats(
     video: Path,
     start: float,
@@ -100,26 +139,31 @@ def _sample_frame_stats(
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as f:
         metadata_path = f.name
 
+    # A raw Windows path breaks the -vf parser twice over: backslashes are eaten
+    # and the drive colon reads as the filter's option separator. Forward slashes
+    # plus an escaped colon plus single quotes around the value survives both.
+    meta_arg = metadata_path.replace("\\", "/").replace(":", r"\:")
+
     try:
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-nostats",
             "-ss", f"{start:.3f}",
             "-i", str(video),
             "-t", f"{duration:.3f}",
-            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file={metadata_path}",
+            "-vf", f"fps={fps:.2f},signalstats,metadata=print:file='{meta_arg}'",
             "-f", "null", "-",
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        # Parse signalstats metadata. Signalstats reports values in the NATIVE
-        # bit depth of the decoded frame (8-bit → 0-255, 10-bit → 0-1023). We
-        # read YBITDEPTH and normalize by (2^depth - 1) so downstream math is
-        # in 0..1 regardless of source bit depth.
+        # Parse signalstats metadata. Values arrive in the source's native bit
+        # depth (8-bit → 0-255, 10-bit → 0-1023) and need normalising to 0..1 —
+        # but the depth comes from the pixel format, never from YBITDEPTH. See
+        # _source_bit_depth for the measurements behind that.
         y_avgs: list[float] = []
         y_mins: list[float] = []
         y_maxs: list[float] = []
         sat_avgs: list[float] = []
-        bit_depth: int = 8
+        bit_depth = _source_bit_depth(video)
 
         def _parse_value(line: str) -> float | None:
             try:
@@ -130,11 +174,7 @@ def _sample_frame_stats(
         with open(metadata_path) as f:
             for line in f:
                 line = line.strip()
-                if "lavfi.signalstats.YBITDEPTH" in line:
-                    v = _parse_value(line)
-                    if v is not None:
-                        bit_depth = int(v)
-                elif "lavfi.signalstats.YAVG" in line:
+                if "lavfi.signalstats.YAVG" in line:
                     v = _parse_value(line)
                     if v is not None:
                         y_avgs.append(v)
@@ -155,7 +195,7 @@ def _sample_frame_stats(
             # Analysis failed — return neutral defaults (no correction)
             return {"y_mean": 0.5, "y_std": 0.18, "sat_mean": 0.25}
 
-        # Normalize by native bit-depth max value
+        # Normalize by the format's max sample value
         max_val = (2 ** bit_depth) - 1
 
         y_mean = (sum(y_avgs) / len(y_avgs)) / max_val
