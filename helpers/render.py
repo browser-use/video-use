@@ -674,7 +674,9 @@ def build_final_composite(
 
     # Subtitles LAST — Rule 1
     if has_subs:
-        subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
+        # as_posix: ffmpeg's filtergraph escaping eats the backslashes of a Windows path
+        # (C:\Users\... → "Unable to open C:Users...", render exits 4294967294)
+        subs_abs = subtitles_path.resolve().as_posix().replace(":", r"\:").replace("'", r"\'")
         filter_parts.append(
             f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
         )
