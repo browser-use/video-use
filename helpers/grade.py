@@ -127,7 +127,7 @@ def _sample_frame_stats(
             except (ValueError, IndexError):
                 return None
 
-        with open(metadata_path) as f:
+        with open(metadata_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if "lavfi.signalstats.YBITDEPTH" in line:
@@ -292,6 +292,8 @@ def apply_grade(input_path: Path, output_path: Path, filter_string: str) -> None
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Apply a color grade via ffmpeg filter chain")
     ap.add_argument("input", type=Path, nargs="?", help="Input video")
     ap.add_argument("-o", "--output", type=Path, help="Output video")

@@ -36,7 +36,7 @@ SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 def load_api_key() -> str:
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
-            for line in candidate.read_text().splitlines():
+            for line in candidate.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
                     continue
@@ -177,7 +177,7 @@ def transcribe_one(
             print(f"  uploading {video.stem}.wav ({size_mb:.1f} MB)", flush=True)
         payload = call_scribe(audio, api_key, language, num_speakers)
 
-    out_path.write_text(json.dumps(payload, indent=2))
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     dt = time.time() - t0
 
     if verbose:
@@ -190,6 +190,8 @@ def transcribe_one(
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Transcribe a video with ElevenLabs Scribe")
     ap.add_argument("video", type=Path, help="Path to video file")
     ap.add_argument(
