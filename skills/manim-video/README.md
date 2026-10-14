@@ -19,5 +19,5 @@ Creates 3Blue1Brown-style animated videos from text prompts. The agent handles t
 Python 3.10+, Manim CE (`pip install manim`), LaTeX, ffmpeg.
 
 ```bash
-bash skills/creative/manim-video/scripts/setup.sh
+bash skills/manim-video/scripts/setup.sh
 ```
