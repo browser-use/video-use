@@ -3,7 +3,7 @@
 Implements the HEURISTICS render pipeline in the correct order:
 
   1. Per-segment extract with color grade + 30ms audio fades baked in
-  2. Lossless -c copy concat into base.mp4
+  2. Lossless -c copy concat into base.mov (PCM audio; AAC is encoded once, at the end)
   3. If overlays or subtitles: single filter graph that overlays animations
      (with PTS shift so frame 0 lands at the overlay window start)
      and applies `subtitles` filter LAST → final.mp4
@@ -307,7 +307,10 @@ def extract_segment(
         "-af", af,
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
         "-pix_fmt", "yuv420p", "-r", out_rate,
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        # PCM, not AAC: each AAC encode adds encoder priming + end padding, and the
+        # -c copy concat keeps all of it, so audio slid ~25-35 ms later at every cut
+        # (+317 ms after 10 cuts). PCM is sample-exact; AAC is encoded once, at the end.
+        "-c:a", "pcm_s16le", "-ar", "48000",
         "-movflags", "+faststart",
         str(out_path),
     ]
@@ -321,7 +324,7 @@ def extract_all_segments(
     draft: bool = False,
     fps: str | None = None,
 ) -> list[Path]:
-    """Extract every EDL range into edit_dir/clips_graded/seg_NN.mp4.
+    """Extract every EDL range into edit_dir/clips_graded/seg_NN.mov.
     Returns the ordered list of segment paths.
 
     If the EDL `grade` is "auto", analyze each segment range with
@@ -362,7 +365,7 @@ def extract_all_segments(
         start = float(r["start"])
         end = float(r["end"])
         duration = end - start
-        out_path = clips_dir / f"seg_{i:02d}_{src_name}.mp4"
+        out_path = clips_dir / f"seg_{i:02d}_{src_name}.mov"
 
         if is_auto:
             seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
@@ -643,10 +646,12 @@ def build_final_composite(
     """
     has_overlays = bool(overlays)
     has_subs = subtitles_path is not None and subtitles_path.exists()
+    # Base audio is PCM: keep it in a .mov intermediate, encode AAC only for a final .mp4
+    audio = ["-c:a", "copy"] if out_path.suffix.lower() == ".mov" else ["-c:a", "aac", "-b:a", "192k"]
 
     if not has_overlays and not has_subs:
         # Nothing to do — just rename/copy base to final name
-        run(["ffmpeg", "-y", "-i", str(base_path), "-c", "copy", str(out_path)], quiet=True)
+        run(["ffmpeg", "-y", "-i", str(base_path), "-c:v", "copy", *audio, str(out_path)], quiet=True)
         return
 
     inputs: list[str] = ["-i", str(base_path)]
@@ -699,7 +704,7 @@ def build_final_composite(
         "-map", "0:a",
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
-        "-c:a", "copy",
+        *audio,
         "-movflags", "+faststart",
         str(out_path),
     ]
@@ -765,11 +770,11 @@ def main() -> None:
 
     # 2. Concat → base
     if args.draft:
-        base_name = "base_draft.mp4"
+        base_name = "base_draft.mov"
     elif args.preview:
-        base_name = "base_preview.mp4"
+        base_name = "base_preview.mov"
     else:
-        base_name = "base.mp4"
+        base_name = "base.mov"
     base_path = edit_dir / base_name
     concat_segments(segment_paths, base_path, edit_dir)
 
@@ -789,7 +794,7 @@ def main() -> None:
         build_final_composite(base_path, overlays, subs_path, out_path, edit_dir)
     else:
         # Composite to a temp file, then run loudnorm → final output
-        tmp_composite = out_path.with_suffix(".prenorm.mp4")
+        tmp_composite = out_path.with_suffix(".prenorm.mov")
         build_final_composite(base_path, overlays, subs_path, tmp_composite, edit_dir)
         print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
         apply_loudnorm_two_pass(tmp_composite, out_path, preview=args.draft)
