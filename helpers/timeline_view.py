@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -115,10 +116,34 @@ def compute_envelope(video: Path, start: float, end: float, samples: int = 2000)
 # -------- Transcript word overlays ------------------------------------------
 
 
+def _resolve_transcript(transcripts_dir: Path, stem: str) -> Path | None:
+    """Find a transcript by literal stem and generated hash suffix."""
+    plain = transcripts_dir / f"{stem}.json"
+    if plain.exists():
+        return plain
+    if not transcripts_dir.is_dir():
+        return None
+    prefix = f"{stem}."
+    matches = sorted(
+        (
+            path for path in transcripts_dir.iterdir()
+            if path.is_file()
+            and path.name.startswith(prefix)
+            and re.fullmatch(
+                r"[0-9a-f]{8}(?:\.track\d+)?\.json",
+                path.name[len(prefix):],
+            )
+        ),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    return matches[0] if matches else None
+
+
 def words_in_range(transcript_path: Path, start: float, end: float) -> list[dict]:
     if not transcript_path.exists():
         return []
-    data = json.loads(transcript_path.read_text())
+    data = json.loads(transcript_path.read_text(encoding="utf-8"))
     out: list[dict] = []
     for w in data.get("words", []):
         t = w.get("type", "word")
@@ -368,9 +393,9 @@ def main() -> None:
     # Auto-resolve transcript if not given
     transcript = args.transcript
     if transcript is None:
-        auto = video.parent / "edit" / "transcripts" / f"{video.stem}.json"
-        if auto.exists():
-            transcript = auto
+        tdir = video.parent / "edit" / "transcripts"
+        if tdir.is_dir():
+            transcript = _resolve_transcript(tdir, video.stem)
 
     out_path = args.output
     if out_path is None:

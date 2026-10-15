@@ -3,7 +3,7 @@
 Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
 each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
 
-Cached per-file: any source that already has a transcript is skipped.
+Cached per-file only when the transcript matches the current source fingerprint.
 
 Usage:
     python helpers/transcribe_batch.py <videos_dir>
@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one, transcript_path
+from transcribe import cached_transcript_path, load_api_key, transcribe_one
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -75,8 +76,19 @@ def main() -> None:
     if not videos:
         sys.exit(f"no videos found in {videos_dir}")
 
-    already_cached = [v for v in videos
-                      if transcript_path(edit_dir, v, args.audio_track).exists()]
+    stem_counts = Counter(video.stem.casefold() for video in videos)
+    legacy_is_unambiguous = {
+        video: stem_counts[video.stem.casefold()] == 1 for video in videos
+    }
+    already_cached = [
+        video for video in videos
+        if cached_transcript_path(
+            edit_dir,
+            video,
+            args.audio_track,
+            allow_legacy=legacy_is_unambiguous[video],
+        ) is not None
+    ]
     pending = [v for v in videos if v not in already_cached]
 
     print(f"found {len(videos)} videos ({len(already_cached)} cached, {len(pending)} to transcribe)")
@@ -101,6 +113,7 @@ def main() -> None:
                 num_speakers=args.num_speakers,
                 verbose=False,
                 audio_track=args.audio_track,
+                allow_legacy_cache=legacy_is_unambiguous[v],
             ): v
             for v in pending
         }
