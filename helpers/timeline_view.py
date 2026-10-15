@@ -157,6 +157,7 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/SFNSMono.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    "C:/Windows/Fonts/consola.ttf",  # Windows: otherwise PIL's tiny bitmap default
 ]
 
 
