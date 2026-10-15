@@ -3,7 +3,7 @@
 Implements the HEURISTICS render pipeline in the correct order:
 
   1. Per-segment extract with color grade + 30ms audio fades baked in
-  2. Lossless -c copy concat into base.mp4
+  2. Stream-copy video and re-encode AAC audio during concat into base.mp4
   3. If overlays or subtitles: single filter graph that overlays animations
      (with PTS shift so frame 0 lands at the overlay window start)
      and applies `subtitles` filter LAST → final.mp4
@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
+import shutil
 import subprocess
 import sys
 from fractions import Fraction
@@ -293,7 +295,7 @@ def extract_segment(
         preset, crf = "fast", "20"
 
     # Frame rate: use the rate the caller resolved once for the whole render
-    # (every segment must share it — concat -c copy in Rule 2 requires a uniform
+    # (every segment must share it — Rule 2 stream-copies video and requires a uniform
     # frame rate). When called standalone with no rate, preserve this source's
     # own rate; fall back to 24 only if it can't be probed.
     out_rate = rate if rate is not None else (probe_source_fps(source) or "24")
@@ -307,7 +309,7 @@ def extract_segment(
         "-af", af,
         "-c:v", "libx264", "-preset", preset, "-crf", crf,
         "-pix_fmt", "yuv420p", "-r", out_rate,
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-c:a", "aac", "-b:a", AAC_BITRATE, "-ar", AAC_SAMPLE_RATE,
         "-movflags", "+faststart",
         str(out_path),
     ]
@@ -339,7 +341,7 @@ def extract_all_segments(
     sources = edl["sources"]
 
     # Resolve ONE output frame rate for the entire render and apply it to every
-    # segment. The lossless concat (Rule 2, `-c copy`) requires all segments to
+    # segment. The video stream-copy concat (Rule 2) requires all segments to
     # share a frame rate; probing per-segment would diverge for multi-source
     # EDLs that mix rates (e.g. a 30fps and a 60fps source) and break the concat.
     # Explicit --fps wins; otherwise preserve the first source's rate.
@@ -379,20 +381,32 @@ def extract_all_segments(
     return seg_paths
 
 
-# -------- Lossless concat ----------------------------------------------------
+# -------- Video stream-copy / continuous-audio concat -----------------------
 
 
 def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -> None:
-    """Lossless concat via the concat demuxer. No re-encode."""
+    """Concat via the concat demuxer.
+
+    Video is stream-copied (lossless). For multiple segments, audio is
+    re-encoded to one continuous AAC stream because independently encoded
+    segments carry priming/padding samples that can click at joins. A single
+    segment has no join, so its AAC stream is copied without another lossy pass.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     concat_list = edit_dir / "_concat.txt"
-    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths), encoding="utf-8")
 
+    audio_codec = (
+        ["-c:a", "copy"]
+        if len(segment_paths) == 1
+        else ["-c:a", "aac", "-b:a", AAC_BITRATE, "-ar", AAC_SAMPLE_RATE]
+    )
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
         "-i", str(concat_list),
-        "-c", "copy",
+        "-c:v", "copy",
+        *audio_codec,
         "-movflags", "+faststart",
         str(out_path),
     ]
@@ -529,13 +543,17 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
 LOUDNORM_I = -14.0
 LOUDNORM_TP = -1.0
 LOUDNORM_LRA = 11.0
+AAC_BITRATE = "192k"
+AAC_SAMPLE_RATE = "48000"
 
 
 def measure_loudness(video_path: Path) -> dict[str, str] | None:
     """Run ffmpeg loudnorm first pass and parse the JSON measurement.
 
     Returns a dict with measured_i, measured_tp, measured_lra, measured_thresh,
-    target_offset, or None if measurement failed.
+    target_offset, or None if measurement failed or values are non-finite
+    (e.g. digital silence produces -inf for input_i/input_tp, which would
+    crash the second-pass filter parse).
     """
     filter_str = (
         f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}:print_format=json"
@@ -547,10 +565,8 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
         "-vn", "-f", "null", "-",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
-    # loudnorm prints the JSON to stderr at the end of the run
     stderr = proc.stderr
 
-    # Find the JSON block — loudnorm output contains a `{ ... }` block
     start = stderr.rfind("{")
     end = stderr.rfind("}")
     if start == -1 or end == -1 or end <= start:
@@ -562,6 +578,13 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
     needed = {"input_i", "input_tp", "input_lra", "input_thresh", "target_offset"}
     if not needed.issubset(data.keys()):
         return None
+    for key in needed:
+        try:
+            v = float(data[key])
+        except (ValueError, TypeError):
+            return None
+        if math.isinf(v) or math.isnan(v):
+            return None
     return data
 
 
@@ -572,12 +595,20 @@ def apply_loudnorm_two_pass(
 ) -> bool:
     """Run two-pass loudnorm on input_path, write normalized copy to output_path.
 
-    Returns True on success, False if measurement failed (caller should fall
-    back to copying the input unchanged).
+    Returns True after writing the output. If no finite measurement is available,
+    preserves the input unchanged rather than passing silence through loudnorm.
 
-    In preview mode, skips the measurement pass and uses a one-pass approximation
-    for speed. Final mode always does the proper two-pass.
+    Preview mode uses a one-pass approximation after checking the measurement;
+    final mode supplies the measured values to the normalization pass.
     """
+    # Silence has no finite loudness target, and one-pass loudnorm can also
+    # produce non-finite samples. Preserve the input when measurement is unavailable.
+    measurement = measure_loudness(input_path)
+    if measurement is None:
+        print("  loudnorm unavailable — preserving input audio unchanged")
+        shutil.copyfile(input_path, output_path)
+        return True
+
     if preview:
         # One-pass approximation — faster, slightly less accurate.
         filter_str = f"loudnorm=I={LOUDNORM_I}:TP={LOUDNORM_TP}:LRA={LOUDNORM_LRA}"
@@ -586,7 +617,7 @@ def apply_loudnorm_two_pass(
             "-i", str(input_path),
             "-c:v", "copy",
             "-af", filter_str,
-            "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+            "-c:a", "aac", "-b:a", AAC_BITRATE, "-ar", AAC_SAMPLE_RATE,
             "-movflags", "+faststart",
             str(output_path),
         ]
@@ -596,11 +627,6 @@ def apply_loudnorm_two_pass(
 
     # Full two-pass
     print(f"  loudnorm pass 1: measuring {input_path.name}")
-    measurement = measure_loudness(input_path)
-    if measurement is None:
-        print("  loudnorm measurement failed — falling back to 1-pass")
-        return apply_loudnorm_two_pass(input_path, output_path, preview=True)
-
     print(f"    measured: I={measurement['input_i']} LUFS  "
           f"TP={measurement['input_tp']}  LRA={measurement['input_lra']}")
 
@@ -618,7 +644,7 @@ def apply_loudnorm_two_pass(
         "-i", str(input_path),
         "-c:v", "copy",
         "-af", filter_str,
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-c:a", "aac", "-b:a", AAC_BITRATE, "-ar", AAC_SAMPLE_RATE,
         "-movflags", "+faststart",
         str(output_path),
     ]
