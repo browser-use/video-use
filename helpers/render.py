@@ -7,6 +7,7 @@ Implements the HEURISTICS render pipeline in the correct order:
   3. If overlays or subtitles: single filter graph that overlays animations
      (with PTS shift so frame 0 lands at the overlay window start)
      and applies `subtitles` filter LAST → final.mp4
+  4. Inspect final.mp4 at every EDL cut boundary; review flags return non-zero.
 
 Optionally builds a master SRT from the per-source transcripts + EDL
 output-timeline offsets, applies the proven force_style (2-word
@@ -794,7 +795,24 @@ def main() -> None:
         tmp_composite.unlink(missing_ok=True)
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
-    print(f"\ndone: {out_path} ({size_mb:.1f} MB)")
+    print(f"\ndone: {out_path} ({size_mb:.1f} MB)", flush=True)
+
+    # A render is not ready to hand back until the cut-boundary checker has
+    # inspected the final output. Review flags leave the rendered file in place
+    # so the agent can inspect the reported timestamps and revise the EDL.
+    verifier = Path(__file__).with_name("verify_cuts.py")
+    print("\ncut-boundary QC", flush=True)
+    qc = subprocess.run(
+        [sys.executable, str(verifier), str(edl_path), str(out_path)],
+        check=False,
+    )
+    if qc.returncode:
+        print(
+            f"cut-boundary QC did not clear (exit {qc.returncode}); "
+            f"render retained at {out_path}",
+            file=sys.stderr,
+        )
+        sys.exit(qc.returncode)
 
 
 if __name__ == "__main__":

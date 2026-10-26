@@ -75,7 +75,8 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
-- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
+- **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST → automatic cut-boundary QC. `--preview` for 1080p medium-quality evaluation; `--draft` for 720p fast cut-point checks. `--build-subtitles` to generate master.srt inline.
+- **`verify_cuts.py <edl.json> <rendered.mp4>`** — inspect audio jumps and one-frame luminance excursions around output cut points. Returns non-zero when a boundary needs review or the media is insufficient to assess it; `--json-out` writes a machine-readable report.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
@@ -87,8 +88,8 @@ For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a su
 3. **Converse.** Describe what you see in plain English. Ask questions *shaped by the material*. Collect: content type, target length/aspect, aesthetic/brand direction, pacing feel, must-preserve moments, must-cut moments, animation and grade preferences, subtitle needs. Do not use a fixed checklist — the right questions are different every time.
 4. **Propose strategy.** 4–8 sentences: shape, take choices, cut direction, animation plan, grade direction, subtitle style, length estimate. **Wait for confirmation.**
 5. **Execute.** Produce `edl.json` via the editor sub-agent brief. Drill into `timeline_view` at ambiguous moments. Build animations in parallel sub-agents. Apply grade per-segment. Compose via `render.py`.
-6. **Preview.** `render.py --preview`.
-7. **Self-eval (before showing the user).** Run `timeline_view` on the **rendered output** (not the sources) at every cut boundary (±1.5s window). Check each image for:
+6. **Preview.** Resolve the helper path relative to this skill, then run `render.py <edit/edl.json> -o <edit/preview.mp4> --preview`. It runs `verify_cuts.py` automatically after rendering.
+7. **Self-eval (before showing the user).** For exit 1, inspect each reported candidate time with `timeline_view` on the **rendered output** (not the sources), compare it with the EDL and source, and distinguish a review candidate from a confirmed defect. For exit 2 or an `unavailable` result, read the error/report, correct the missing media or runtime condition, and rerun QC; do not claim the boundary is clear. Only use `timeline_view` when a specific timestamp is available. Then inspect every cut boundary (±1.5s window). Check each image for:
    - Visual discontinuity / flash / jump at the cut
    - Waveform spike at the boundary (audio pop that slipped past the 30ms fade)
    - Subtitle hidden behind an overlay (Rule 1 violation)

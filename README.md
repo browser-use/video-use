@@ -101,6 +101,18 @@ Transcribe ──> Pack ──> LLM Reasons ──> EDL ──> Render ──> S
 
 The self-eval loop runs `timeline_view` on the _rendered output_ at every cut boundary — catches visual jumps, audio pops, hidden subtitles. You see the preview only after it passes.
 
+The renderer also runs `helpers/verify_cuts.py` against the final output and EDL. It checks for large audio sample jumps near each join and single-frame luminance flashes; a flagged boundary returns a non-zero exit so the agent can inspect that timestamp before handing back the video. If the media is too short to inspect a boundary, the check reports `unavailable` and also returns non-zero. Review flags are candidates for inspection, not confirmed defects.
+
+To inspect an existing render directly, change to the checked-out `video-use` repository root first (not the edit directory). The EDL and rendered video paths may be absolute or relative to that directory:
+
+```bash
+cd /path/to/video-use
+python helpers/verify_cuts.py /path/to/edit/edl.json /path/to/edit/final.mp4
+python helpers/verify_cuts.py /path/to/edit/edl.json /path/to/edit/final.mp4 --json-out /path/to/edit/final.qc.json
+```
+
+The report checks only the EDL boundaries and uses local signal thresholds. A clean report is not a full-video perceptual review.
+
 ## Design principles
 
 1. **Text + on-demand visuals.** No frame-dumping. The transcript is the surface.
