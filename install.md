@@ -85,13 +85,20 @@ Figure out which agent you are running under, and register once. A symlink of th
     ln -sfn ~/Developer/video-use "${CODEX_HOME:-$HOME/.codex}/skills/video-use"
     ```
 
+- **OpenCode** (`~/.config/opencode/` present):
+
+    ```bash
+    mkdir -p ~/.config/opencode/skills
+    ln -sfn ~/Developer/video-use ~/.config/opencode/skills/video-use
+    ```
+
 - **Hermes / Openclaw / another agent with a skills directory**: symlink `~/Developer/video-use` into that agent's skills directory under the name `video-use`. If the agent has no skills directory, add a line to its system prompt / config pointing at `~/Developer/video-use/SKILL.md` (e.g. an `@~/Developer/video-use/SKILL.md` import in a `CLAUDE.md`-equivalent).
 
 If you can't tell which agent you're in, ask the user once: "which agent am I running under — Claude Code, Codex, or something else?" Then pick the right target.
 
 ### 5. ElevenLabs API key
 
-Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
+Transcription defaults to the local whisper.cpp helper (`transcribe_local.py`) — no API key needed. ElevenLabs Scribe (`transcribe.py`) is optional, only for diarization/audio events.
 
 1. Check existing state in this order and stop at the first hit:
 
@@ -157,6 +164,9 @@ Tell the user, in one short message:
 - `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
 - Node.js/npm are only needed for HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
+- Offline transcription (optional): `helpers/transcribe_local.py` uses a local `whisper-cli` + ggml model (e.g. `~/.cache/hyperframes/whisper/models/ggml-small.bin`). No ElevenLabs key needed, but no diarization/audio events. Set `WHISPER_CLI` / `WHISPER_MODEL` if not in default paths.
+- For OpenCode Go users: pick a **vision-capable** model for the editing session (e.g. `opencode-go/gemini-4-argon`, `opencode-go/gpt-6-luna`, `opencode-go/claude-haiku-5-5`); text-only models (`beam-free`, `deepseek-v4-pro`, `glm-5.3`, etc.) can cut by audio but cannot run visual self-eval. Full list lives in `SKILL.md` → Setup → Model capability.
+- **OpenCode agent profile:** this repo ships `agents/opencode/video-use.md` (symlink it to `~/.config/opencode/agents/video-use.md`). It pins a vision-capable model (`opencode-go/gemini-4-argon`) and grants the tools the skill needs (shell, edit, subagent, skill). Launch with `opencode --agent video-use`.
 - HyperFrames, Remotion, and Manim are optional animation engines. Don't install or prefer one globally during setup; pick the engine per animation slot in `SKILL.md`. HyperFrames can run through `npx --yes hyperframes ...` in the slot directory. Remotion can be scaffolded with `npx create-video@latest` or installed inside the slot before rendering.
 - Never run transcription as part of install verification unless the user explicitly asks — Scribe costs real money.
 - If the user is on Linux without a package manager Claude recognizes, print the manual `ffmpeg` install URL and wait rather than guessing.

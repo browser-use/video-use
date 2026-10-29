@@ -56,6 +56,10 @@ If you'd rather do it by hand:
 git clone https://github.com/browser-use/video-use ~/Developer/video-use
 ln -sfn ~/Developer/video-use ~/.claude/skills/video-use        # Claude Code
 # ln -sfn ~/Developer/video-use ~/.codex/skills/video-use       # Codex
+# ln -sfn ~/Developer/video-use ~/.config/opencode/skills/video-use  # OpenCode
+# ln -sfn ~/Developer/video-use/agents/opencode/video-use.md ~/.config/opencode/agents/video-use.md  # OpenCode agent profile
+# (variants: video-use-gpt.md, video-use-claude.md, video-use-qwen.md, video-use-grok.md, video-use-kimi.md, video-use-deepseek.md)
+# Quick switch: bash ~/Developer/video-use/scripts/switch-video-model.sh <gemini|gpt|claude|qwen|grok|kimi|deepseek|default>
 
 # 2. Install deps
 cd ~/Developer/video-use
