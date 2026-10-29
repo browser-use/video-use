@@ -28,7 +28,7 @@ These are the things where deviation produces silent failures or broken output. 
 7. **Pad every cut edge.** Working window: 30–200ms. Scribe timestamps drift 50–100ms — padding absorbs the drift. Tighter for fast-paced, looser for cinematic.
 8. **Word-level verbatim ASR only.** Never SRT/phrase mode (loses sub-second gap data). Never normalized fillers (loses editorial signal).
 9. **Cache transcripts per source.** Never re-transcribe unless the source file itself changed.
-10. **Parallel sub-agents for multiple animations.** Never sequential. Spawn N at once via the `Agent` tool; total wall time ≈ slowest one.
+10. **Parallel sub-agents for multiple animations.** Never sequential. Spawn N at once via your agent's sub-agent/task tool (Claude Code `Agent`, OpenCode `task`/subagent, etc.); total wall time ≈ slowest one. If your agent has no sub-agent tool, run them as parallel background shell jobs instead.
 11. **Strategy confirmation before execution.** Never touch the cut until the user has approved the plain-English plan.
 12. **All session outputs in `<videos_dir>/edit/`.** Never write inside the `video-use/` project directory.
 
@@ -63,26 +63,36 @@ First-time install lives in `install.md` (clone, deps, ffmpeg, skill registratio
 - `ffmpeg` + `ffprobe` on PATH.
 - Python deps installed (`uv sync` or `pip install -e .` inside the repo).
 - Node.js + npm available if the session needs HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
+- **Model capability.** The skill is model-agnostic, but it needs an agent with shell/file tools and reliable instruction-following. Full self-eval (visual checks on frames) also requires a **vision-capable** model; text-only models can still do audio-first cutting but cannot verify rendered frames — flag that limitation to the user.
+
+  **OpenCode Go — recommended vision-capable models** (input accepts `image/*`):
+  - Best overall: `opencode-go/gemini-4-argon` (1.05M ctx, also video/audio/PDF), `opencode-go/gpt-6-luna` / `gpt-5.6-luna` (1.05M ctx, cheap), `opencode-go/claude-haiku-5-5` (1M ctx).
+  - Strong long-context: `opencode-go/kimi-k3`, `opencode-go/kimi-k3.1-pro`, `opencode-go/qwen3.8-max`.
+  - Budget/parallel sub-agents: `opencode-go/qwen3.8-flash`, `opencode-go/glm-5.3-flash`.
+  - Free with vision: `opencode-go/longcat-2.5-preview-free`, `opencode-go/space-bunny`, `opencode-go/minimax-m3.1-flash-free`, `opencode-go/step-5-preview-free`.
+  - **Text-only (avoid for full pipeline):** `beam-free`, `cat-jam-free`, `deepseek-v4-pro`, `glm-5.2`, `glm-5.3`, `hy3`, `hy4-preview`, `iceman-contributor-free`, `longcat-2.0`, `mimo-v2.5-pro`, `minimax-m2.7`.
 - `yt-dlp`, HyperFrames, Remotion, Manim installed only on first use.
 - First-use animation setup happens inside the slot directory, never at the video-use repo root. HyperFrames can be invoked with `npx --yes hyperframes ...`; Remotion can be scaffolded with `npx create-video@latest` or installed as a project-local dependency before using its `remotion render` command.
 - This skill vendors `skills/manim-video/`. Read its SKILL.md when building a Manim slot.
 
-Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this SKILL.md. Resolve their paths relative to the directory containing this file — the skill is typically symlinked at `~/.claude/skills/video-use/` or `~/.codex/skills/video-use/`.
+Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this SKILL.md. Resolve their paths relative to the directory containing this file — the skill is typically symlinked at `~/.claude/skills/video-use/`, `~/.codex/skills/video-use/`, or `~/.config/opencode/skills/video-use/`.
 
 ## Helpers
 
-- **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
+- **`transcribe_local.py <video>`** — **default** single-file transcription (offline, whisper.cpp, no API key). Produces Scribe-compatible JSON. Limitations: single speaker, no audio-event tags, lower accuracy. Requires `whisper-cli` + a ggml model (see `WHISPER_CLI` / `WHISPER_MODEL`).
+- **`transcribe_batch_local.py <dir>`** — **default** batch transcription (offline, parallel whisper.cpp workers). Cached per file.
+- **`transcribe.py <video>`** — cloud transcription (ElevenLabs Scribe) with diarization + audio events. Use when you need multi-speaker or audio-event tags. Requires `ELEVENLABS_API_KEY`. `--num-speakers N` optional. Cached.
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
 - **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
-For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
+For animations, create `<edit>/animations/slot_<id>/` with your shell tool and spawn a sub-agent via your agent's sub-agent/task tool (Claude Code `Agent`, OpenCode `task`, etc.).
 
 ## The process
 
-1. **Inventory.** `ffprobe` every source. `transcribe_batch.py` on the directory. `pack_transcripts.py` to produce `takes_packed.md`. Sample one or two `timeline_view`s for a visual first impression.
+1. **Inventory.** `ffprobe` every source. Transcribe with `transcribe_batch_local.py` by default (offline, whisper.cpp) for a directory, or `transcribe_local.py` for a single file — use `transcribe_batch.py`/`transcribe.py` (ElevenLabs) only if you need diarization/audio events. Then `pack_transcripts.py` to produce `takes_packed.md`. Sample one or two `timeline_view`s for a visual first impression.
 2. **Pre-scan for problems.** One pass over `takes_packed.md` to note verbal slips, obvious mis-speaks, or phrasings to avoid. Plain list, feed into the editor brief.
 3. **Converse.** Describe what you see in plain English. Ask questions *shaped by the material*. Collect: content type, target length/aspect, aesthetic/brand direction, pacing feel, must-preserve moments, must-cut moments, animation and grade preferences, subtitle needs. Do not use a fixed checklist — the right questions are different every time.
 4. **Propose strategy.** 4–8 sentences: shape, take choices, cut direction, animation plan, grade direction, subtitle style, length estimate. **Wait for confirmation.**
@@ -254,7 +264,7 @@ This is one style. If the brand is warm and serif, use that. If it's colorful an
 
 **Worked example — "show the edit" hook** (a launch video for this tool). Instead of a title card, the first 3s visualize the editing itself: each transcript word pops in on its Scribe timestamp, with bars under it drawn from the real audio envelope; a filler ("ummm") grows letter by letter while it is spoken, turns orange and is cut out on screen at the same frame the audio cuts, and the next line lands immediately. It works because the picture is *driven by the same data as the sound* — one composition (Remotion) reads frame-exact word/envelope JSON produced in Python, so nothing can drift. Use the idea whenever the story is "we removed something": make the removal visible.
 
-**Parallel sub-agent brief** — each animation is one sub-agent spawned via the `Agent` tool. Each prompt is self-contained (sub-agents have no parent context). Include:
+**Parallel sub-agent brief** — each animation is one sub-agent spawned via your agent's sub-agent/task tool (Claude Code `Agent`, OpenCode `task`, etc.). Each prompt is self-contained (sub-agents have no parent context). Include:
 
 1. One-sentence goal: *"Build ONE animation: [spec]. Nothing else."*
 2. Absolute output path (`<edit>/animations/slot_<id>/render.mp4`)
