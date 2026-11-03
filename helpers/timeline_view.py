@@ -15,7 +15,7 @@ Usage:
     python helpers/timeline_view.py <video> <start> <end> -o out.png
     python helpers/timeline_view.py <video> <start> <end> --n-frames 12
     python helpers/timeline_view.py <video> <start> <end> --transcript <path>
-    python helpers/timeline_view.py --edl <edl.json>   (full-project view — not yet)
+    python helpers/timeline_view.py <rendered-video> --edl <edl.json>
 """
 
 from __future__ import annotations
@@ -29,6 +29,11 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+try:
+    from .full_project_review import create_full_project_review
+except ImportError:  # Direct script invocation from helpers/.
+    from full_project_review import create_full_project_review
 
 
 # -------- Frame extraction ---------------------------------------------------
@@ -335,25 +340,60 @@ def main() -> None:
     ap.add_argument("video", type=Path, nargs="?", help="Source video")
     ap.add_argument("start", type=float, nargs="?", help="Start time in seconds")
     ap.add_argument("end", type=float, nargs="?", help="End time in seconds")
-    ap.add_argument("-o", "--output", type=Path, default=None, help="Output PNG path")
+    ap.add_argument("-o", "--output", type=Path, default=None, help="Output PNG path (range mode)")
     ap.add_argument("--n-frames", type=int, default=10, help="Number of frames in the filmstrip (default 10)")
     ap.add_argument(
         "--transcript",
         type=Path,
         default=None,
-        help="Path to transcript.json for word labels + silence shading. "
-             "If omitted, will auto-resolve to <video_parent>/edit/transcripts/<video_stem>.json",
+        help="Range mode: transcript.json. EDL mode: output-time .srt/.vtt; "
+             "defaults to master.srt beside the EDL when present.",
     )
     ap.add_argument(
         "--edl",
         type=Path,
         default=None,
-        help="(Not yet implemented) Render a full-project timeline from an EDL",
+        help="Generate a full-project HTML review from this EDL and the rendered video",
+    )
+    ap.add_argument(
+        "--report-dir",
+        type=Path,
+        default=None,
+        help="Review packet output directory (EDL mode; default: a new verify/ folder)",
+    )
+    ap.add_argument(
+        "--frames-per-scene",
+        type=int,
+        default=3,
+        help="Number of output frames sampled within each EDL scene (EDL mode, 1–9; default 3)",
     )
     args = ap.parse_args()
 
     if args.edl:
-        sys.exit("--edl mode is not implemented yet; use range mode")
+        if not args.video:
+            ap.error("EDL mode requires the rendered video as the first argument")
+        if args.start is not None or args.end is not None:
+            ap.error("EDL mode does not take a start/end range")
+        if args.output:
+            ap.error("use --report-dir for EDL mode; -o is for range PNG output")
+        try:
+            report_dir = create_full_project_review(
+                edl_path=args.edl,
+                video_path=args.video,
+                report_dir=args.report_dir,
+                transcript_path=args.transcript,
+                frames_per_scene=args.frames_per_scene,
+            )
+        except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+            sys.exit(f"full-project review failed: {exc}")
+        print(f"review packet → {report_dir / 'index.html'}")
+        print(f"manifest → {report_dir / 'manifest.json'}")
+        return
+
+    if args.report_dir:
+        ap.error("--report-dir requires --edl")
+    if args.frames_per_scene != 3:
+        ap.error("--frames-per-scene requires --edl")
 
     if not args.video or args.start is None or args.end is None:
         ap.error("video, start, and end are required")
