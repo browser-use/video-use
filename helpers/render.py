@@ -152,7 +152,7 @@ def is_portrait_source(video: Path) -> bool:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries",
-             "stream=width,height:stream_side_data=rotation",
+             "stream=width,height:stream_side_data_list",
              "-of", "json", str(video)],
             capture_output=True, text=True, check=True,
         )
