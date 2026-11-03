@@ -22,7 +22,7 @@ class PortraitDetectionTests(unittest.TestCase):
             portrait = render.is_portrait_source(Path("source.mp4"))
         cmd = run.call_args.args[0]
         show_entries = cmd[cmd.index("-show_entries") + 1]
-        self.assertIn("stream_side_data=rotation", show_entries)
+        self.assertIn("stream_side_data_list", show_entries)
         self.assertNotIn("stream_tags=rotate", show_entries)
         return portrait
 
@@ -51,6 +51,19 @@ class PortraitDetectionTests(unittest.TestCase):
             "side_data_list": [{"rotation": 90}],
         }
         self.assertFalse(self._is_portrait(stream))
+
+    def test_probe_works_on_ffprobe_4_without_stream_side_data_section(self):
+        stdout = json.dumps({"streams": [{"width": 1080, "height": 1920}]})
+
+        def ffprobe_4(cmd, **kwargs):
+            # ffprobe 4.4 rejects the whole option when it names this section.
+            show_entries = cmd[cmd.index("-show_entries") + 1]
+            if "stream_side_data=" in show_entries:
+                raise subprocess.CalledProcessError(1, cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+        with patch.object(render.subprocess, "run", side_effect=ffprobe_4):
+            self.assertTrue(render.is_portrait_source(Path("source.mp4")))
 
     def test_invalid_probe_output_falls_back_to_landscape(self):
         result = subprocess.CompletedProcess([], 0, stdout="not json", stderr="")
