@@ -91,7 +91,12 @@ For one review pass across the final render, map the EDL's scenes against output
 ```bash
 # From the video project's directory, using the default Codex install path:
 VIDEO_USE_SKILL_DIR="${CODEX_HOME:-$HOME/.codex}/skills/video-use"
-uv run --project "$VIDEO_USE_SKILL_DIR" python "$VIDEO_USE_SKILL_DIR/helpers/timeline_view.py" "$PWD/edit/final.mp4" --edl "$PWD/edit/edl.json"
+if command -v uv >/dev/null 2>&1; then
+  uv run --project "$VIDEO_USE_SKILL_DIR" python "$VIDEO_USE_SKILL_DIR/helpers/timeline_view.py" "$PWD/edit/final.mp4" --edl "$PWD/edit/edl.json"
+else
+  # Use the same Python environment where you ran `pip install -e .`.
+  python "$VIDEO_USE_SKILL_DIR/helpers/timeline_view.py" "$PWD/edit/final.mp4" --edl "$PWD/edit/edl.json"
+fi
 # For Claude Code, set VIDEO_USE_SKILL_DIR="$HOME/.claude/skills/video-use".
 ```
 
