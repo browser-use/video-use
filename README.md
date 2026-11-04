@@ -89,7 +89,10 @@ The LLM never watches the video. It **reads** it — through two layers that tog
 For one review pass across the final render, map the EDL's scenes against output-time subtitles and sampled frames:
 
 ```bash
-python helpers/timeline_view.py edit/final.mp4 --edl edit/edl.json
+# From the video project's directory, using the default Codex install path:
+VIDEO_USE_SKILL_DIR="${CODEX_HOME:-$HOME/.codex}/skills/video-use"
+uv run --project "$VIDEO_USE_SKILL_DIR" python "$VIDEO_USE_SKILL_DIR/helpers/timeline_view.py" "$PWD/edit/final.mp4" --edl "$PWD/edit/edl.json"
+# For Claude Code, set VIDEO_USE_SKILL_DIR="$HOME/.claude/skills/video-use".
 ```
 
 The report uses the subtitle path in the EDL when one is set. Otherwise, it uses an adjacent `master.srt` if present. Open the printed `index.html` to inspect each scene's output range, EDL quote, subtitle cues, and sampled frames. The command also writes `manifest.json` and timing notes. It does not assign a semantic-alignment pass; the reviewer decides whether the picture matches what is being said. The report links to the original video rather than copying it, so keep that video at its source path when reopening the report.

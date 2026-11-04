@@ -29,7 +29,15 @@ def _time_seconds(value: str) -> float:
         hours, minutes, seconds = parts
     else:
         raise ValueError(f"invalid subtitle timestamp: {value}")
-    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    minute_value = int(minutes)
+    second_value = float(seconds)
+    if (
+        not 0 <= minute_value < 60
+        or not math.isfinite(second_value)
+        or not 0 <= second_value < 60
+    ):
+        raise ValueError(f"invalid subtitle timestamp: {value}")
+    return int(hours) * 3600 + minute_value * 60 + second_value
 
 
 def read_subtitles(path: Path) -> list[dict]:
@@ -325,7 +333,7 @@ def _html_report(video: Path, video_href: str, manifest: dict) -> str:
     .planned span {{ display:block; color:var(--cut); font-size:12px; margin-bottom:3px; }}
     .frames {{ margin:14px 0 14px 56px; display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px; }}
     figure {{ margin:0; min-width:0; background:#111316; border-bottom:2px solid var(--cut); }}
-    figure img {{ display:block; width:100%; aspect-ratio:16/9; object-fit:cover; background:#101114; }}
+    figure img {{ display:block; width:100%; aspect-ratio:16/9; object-fit:contain; background:#101114; }}
     figcaption {{ padding:6px 9px; color:var(--voice); font:12px ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums; }}
     .voice {{ margin-left:56px; border-top:1px solid var(--line); padding-top:10px; }}
     summary {{ cursor:pointer; color:var(--voice); font-weight:550; }}

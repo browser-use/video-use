@@ -89,7 +89,12 @@ For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a su
 4. **Propose strategy.** 4–8 sentences: shape, take choices, cut direction, animation plan, grade direction, subtitle style, length estimate. **Wait for confirmation.**
 5. **Execute.** Produce `edl.json` via the editor sub-agent brief. Drill into `timeline_view` at ambiguous moments. Build animations in parallel sub-agents. Apply grade per-segment. Compose via `render.py`.
 6. **Preview.** `render.py --preview`.
-7. **Self-eval (before showing the user).** Create one full-project review from the **rendered output** (not the sources): `python helpers/timeline_view.py <rendered.mp4> --edl <edl.json>`. Inspect the scene-to-subtitle mapping and sampled frames; this packet is for review and is not a semantic pass/fail. Then run `timeline_view` at every cut boundary (±1.5s window). Check each image for:
+7. **Self-eval (before showing the user).** Create one full-project review from the **rendered output** (not the sources). Resolve `VIDEO_USE_SKILL_DIR` from the directory containing this `SKILL.md` and `VIDEO_DIR` to the current video project directory, then run:
+   ```bash
+   uv run --project "$VIDEO_USE_SKILL_DIR" python "$VIDEO_USE_SKILL_DIR/helpers/timeline_view.py" "$VIDEO_DIR/edit/final.mp4" --edl "$VIDEO_DIR/edit/edl.json"
+   ```
+   If the installation used pip rather than uv, use the Python executable where this skill's dependencies were installed.
+   Inspect the scene-to-subtitle mapping and sampled frames; this packet is for review and is not a semantic pass/fail. Then run `timeline_view` at every cut boundary (±1.5s window). Check each image for:
    - Visual discontinuity / flash / jump at the cut
    - Waveform spike at the boundary (audio pop that slipped past the 30ms fade)
    - Subtitle hidden behind an overlay (Rule 1 violation)
