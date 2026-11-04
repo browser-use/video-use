@@ -75,6 +75,7 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
+- **`timeline_view.py <rendered-video> --edl <edl.json>`** — full-project HTML/JSON review with each EDL scene, output-time subtitle cues, and sampled frames. Uses the EDL's `subtitles` path when set; otherwise, uses adjacent `master.srt` if present. It reports timing facts and review points; it does not decide semantic alignment.
 - **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
 
@@ -88,7 +89,16 @@ For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a su
 4. **Propose strategy.** 4–8 sentences: shape, take choices, cut direction, animation plan, grade direction, subtitle style, length estimate. **Wait for confirmation.**
 5. **Execute.** Produce `edl.json` via the editor sub-agent brief. Drill into `timeline_view` at ambiguous moments. Build animations in parallel sub-agents. Apply grade per-segment. Compose via `render.py`.
 6. **Preview.** `render.py --preview`.
-7. **Self-eval (before showing the user).** Run `timeline_view` on the **rendered output** (not the sources) at every cut boundary (±1.5s window). Check each image for:
+7. **Self-eval (before showing the user).** Create one full-project review from the **rendered output** (not the sources). Resolve `VIDEO_USE_SKILL_DIR` from the directory containing this `SKILL.md` and `VIDEO_DIR` to the current video project directory, then run:
+   ```bash
+   if command -v uv >/dev/null 2>&1; then
+     uv run --project "$VIDEO_USE_SKILL_DIR" python "$VIDEO_USE_SKILL_DIR/helpers/timeline_view.py" "$VIDEO_DIR/edit/preview.mp4" --edl "$VIDEO_DIR/edit/edl.json"
+   else
+     # Use the same Python environment where you ran `pip install -e .`.
+     python "$VIDEO_USE_SKILL_DIR/helpers/timeline_view.py" "$VIDEO_DIR/edit/preview.mp4" --edl "$VIDEO_DIR/edit/edl.json"
+   fi
+   ```
+   Inspect the scene-to-subtitle mapping and sampled frames; this packet is for review and is not a semantic pass/fail. Then run `timeline_view` at every cut boundary (±1.5s window). Check each image for:
    - Visual discontinuity / flash / jump at the cut
    - Waveform spike at the boundary (audio pop that slipped past the 30ms fade)
    - Subtitle hidden behind an overlay (Rule 1 violation)
