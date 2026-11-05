@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -422,7 +423,8 @@ def _words_in_range(transcript: dict, t_start: float, t_end: float) -> list[dict
             continue
         ws = w.get("start")
         we = w.get("end")
-        if ws is None or we is None:
+        if (type(ws) not in (int, float) or type(we) not in (int, float)
+                or not math.isfinite(ws) or not math.isfinite(we) or we <= ws):
             continue
         if we <= t_start or ws >= t_end:
             continue
@@ -498,8 +500,10 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
             local_end = min(seg_end, chunk[-1].get("end", seg_end))
             out_start = max(0.0, local_start - seg_start) + seg_offset
             out_end = max(0.0, local_end - seg_start) + seg_offset
-            if out_end <= out_start:
-                out_end = out_start + 0.4
+            # Never extend a clipped/invalid cue into the next edit. SRT has
+            # millisecond resolution, so also omit intervals that round empty.
+            if round(out_end * 1000) <= round(out_start * 1000):
+                continue
             text = " ".join((w.get("text") or "").strip() for w in chunk)
             text = re.sub(r"\s+", " ", text).strip()
             # Strip trailing punctuation for cleaner uppercase look
