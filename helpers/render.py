@@ -423,8 +423,13 @@ def _words_in_range(transcript: dict, t_start: float, t_end: float) -> list[dict
             continue
         ws = w.get("start")
         we = w.get("end")
-        if (type(ws) not in (int, float) or type(we) not in (int, float)
-                or not math.isfinite(ws) or not math.isfinite(we) or we <= ws):
+        if type(ws) not in (int, float) or type(we) not in (int, float):
+            continue
+        try:
+            if not math.isfinite(ws) or not math.isfinite(we) or we <= ws:
+                continue
+        except OverflowError:
+            # JSON integers can exceed the floating-point timestamp range.
             continue
         if we <= t_start or ws >= t_end:
             continue

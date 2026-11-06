@@ -25,9 +25,15 @@ class CaptionBoundaryTests(unittest.TestCase):
     def test_invalid_word_intervals_are_ignored(self):
         words = [{'type': 'word', 'text': 'bad', 'start': a, 'end': b}
                  for a, b in [(0.5, 0.4), (0.4, 0.4), (float('nan'), 0.8),
-                              (0.2, float('inf')), ('0.2', 0.5), (True, 1.2)]]
+                              (0.2, float('inf')), ('0.2', 0.5), (True, 1.2),
+                              (10**1000, 10**1000 + 1), (-10**1000, 0.5),
+                              (0.2, 10**1000), (-10**1000, 10**1000)]]
         good = {'type': 'word', 'text': 'valid', 'start': 0.2, 'end': 0.5}
         self.assertEqual(render._words_in_range({'words': words + [good]}, 0, 1), [good])
+
+    def test_finite_integer_intervals_remain_valid(self):
+        good = {'type': 'word', 'text': 'valid', 'start': 0, 'end': 1}
+        self.assertEqual(render._words_in_range({'words': [good]}, 0, 1), [good])
 
     def test_submillisecond_cue_does_not_serialize_as_empty_interval(self):
         with tempfile.TemporaryDirectory() as name:
