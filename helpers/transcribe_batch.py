@@ -91,20 +91,20 @@ def main() -> None:
 
     errors: list[tuple[Path, str]] = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {
-            pool.submit(
-                transcribe_one,
-                video=v,
-                edit_dir=edit_dir,
-                api_key=api_key,
-                language=args.language,
-                num_speakers=args.num_speakers,
-                verbose=False,
-                audio_track=args.audio_track,
-            ): v
-            for v in pending
-        }
         try:
+            futures = {
+                pool.submit(
+                    transcribe_one,
+                    video=v,
+                    edit_dir=edit_dir,
+                    api_key=api_key,
+                    language=args.language,
+                    num_speakers=args.num_speakers,
+                    verbose=False,
+                    audio_track=args.audio_track,
+                ): v
+                for v in pending
+            }
             for fut in as_completed(futures):
                 v = futures[fut]
                 try:
