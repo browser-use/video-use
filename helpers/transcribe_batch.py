@@ -91,27 +91,34 @@ def main() -> None:
 
     errors: list[tuple[Path, str]] = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {
-            pool.submit(
-                transcribe_one,
-                video=v,
-                edit_dir=edit_dir,
-                api_key=api_key,
-                language=args.language,
-                num_speakers=args.num_speakers,
-                verbose=False,
-                audio_track=args.audio_track,
-            ): v
-            for v in pending
-        }
-        for fut in as_completed(futures):
-            v = futures[fut]
-            try:
-                out = fut.result()
-                print(f"  + {v.stem}  →  {out.name}")
-            except Exception as e:
-                errors.append((v, str(e)))
-                print(f"  x {v.stem}  FAILED: {e}")
+        try:
+            futures = {
+                pool.submit(
+                    transcribe_one,
+                    video=v,
+                    edit_dir=edit_dir,
+                    api_key=api_key,
+                    language=args.language,
+                    num_speakers=args.num_speakers,
+                    verbose=False,
+                    audio_track=args.audio_track,
+                ): v
+                for v in pending
+            }
+            for fut in as_completed(futures):
+                v = futures[fut]
+                try:
+                    out = fut.result()
+                    print(f"  + {v.stem}  →  {out.name}")
+                except Exception as e:
+                    errors.append((v, str(e)))
+                    print(f"  x {v.stem}  FAILED: {e}")
+        except KeyboardInterrupt:
+            # Leaving the `with` block would wait for every queued file to be
+            # uploaded (and billed). Drop the queue; only in-flight uploads finish.
+            pool.shutdown(wait=False, cancel_futures=True)
+            print("\ninterrupted: cancelled the files that had not started", flush=True)
+            raise
 
     dt = time.time() - t0
     print(f"\ndone in {dt:.1f}s")
