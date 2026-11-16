@@ -102,13 +102,12 @@ def compute_envelope(video: Path, start: float, end: float, samples: int = 2000)
             pcm = np.pad(pcm, (0, want - pcm.size))
         pcm = pcm[:want]
         edges = np.linspace(0, want, samples + 1).astype(int)
-        sq = np.concatenate(([0.0], np.cumsum(pcm.astype(np.float64) ** 2)))
-        width = np.diff(edges)
-        env = np.sqrt((sq[edges[1:]] - sq[edges[:-1]]) / np.maximum(width, 1))
-        # Very short ranges give bins narrower than one sample: use that sample.
-        empty = width == 0
-        if empty.any():
-            env[empty] = np.abs(pcm[np.minimum(edges[:-1][empty], want - 1)])
+        env = np.empty(samples)
+        for i, (lo, hi) in enumerate(zip(edges[:-1], edges[1:])):
+            if hi > lo:
+                env[i] = np.sqrt(np.mean(pcm[lo:hi].astype(np.float64) ** 2))
+            else:  # very short range: bin narrower than one sample, use that sample
+                env[i] = abs(pcm[min(lo, want - 1)])
         # Normalize to [0, 1]
         if env.max() > 0:
             env = env / env.max()
