@@ -94,16 +94,20 @@ def compute_envelope(video: Path, start: float, end: float, samples: int = 2000)
         if pcm.size == 0:
             return np.zeros(samples)
 
-        # Windowed RMS → envelope of length `samples`
-        n = pcm.size
-        window = max(1, n // samples)
-        usable = (n // window) * window
-        reshaped = pcm[:usable].reshape(-1, window)
-        env = np.sqrt(np.mean(reshaped ** 2, axis=1))
-        if env.size < samples:
-            env = np.pad(env, (0, samples - env.size))
-        elif env.size > samples:
-            env = env[:samples]
+        # Windowed RMS → envelope of length `samples`. Bin i covers the i-th
+        # 1/samples of [start, end], so the waveform lines up with the time
+        # ruler and word labels however many PCM samples the range holds.
+        want = max(1, int(round((end - start) * 16000)))
+        if pcm.size < want:  # audio ended inside the range: silence after it
+            pcm = np.pad(pcm, (0, want - pcm.size))
+        pcm = pcm[:want]
+        edges = np.linspace(0, want, samples + 1).astype(int)
+        env = np.empty(samples)
+        for i, (lo, hi) in enumerate(zip(edges[:-1], edges[1:])):
+            if hi > lo:
+                env[i] = np.sqrt(np.mean(pcm[lo:hi].astype(np.float64) ** 2))
+            else:  # very short range: bin narrower than one sample, use that sample
+                env[i] = abs(pcm[min(lo, want - 1)])
         # Normalize to [0, 1]
         if env.max() > 0:
             env = env / env.max()
