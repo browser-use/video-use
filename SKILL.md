@@ -44,8 +44,10 @@ The skill lives in `video-use/`. User footage lives wherever they put it. All se
 └── edit/
     ├── project.md               ← memory; appended every session
     ├── takes_packed.md          ← phrase-level transcripts, the LLM's primary reading view
+    ├── visual_notes.md          ← optional: what the picture shows, logged by Gemini (±1s)
     ├── edl.json                 ← cut decisions
     ├── transcripts/<name>.json  ← cached raw Scribe JSON
+    ├── visual/<name>.json       ← cached Gemini visual notes per source
     ├── animations/slot_<id>/    ← per-animation source + render + reasoning
     ├── clips_graded/            ← per-segment extracts with grade + fades
     ├── master.srt               ← output-timeline subtitles
@@ -61,6 +63,7 @@ First-time install lives in `install.md` (clone, deps, ffmpeg, skill registratio
 
 - `ELEVENLABS_API_KEY` resolves — either in the environment or in `.env` at the video-use repo root. If missing, ask the user to paste one and write it to `.env` (never to the user's `<videos_dir>`).
 - `ffmpeg` + `ffprobe` on PATH.
+- `GEMINI_API_KEY` only if the session uses `visual_notes.py`. Same resolution and same rule as the ElevenLabs key; ask for it the first time it is needed, not at startup.
 - Python deps installed (`uv sync` or `pip install -e .` inside the repo).
 - Node.js + npm available if the session needs HyperFrames or Remotion slots. HyperFrames currently requires Node.js 22+.
 - `yt-dlp`, HyperFrames, Remotion, Manim installed only on first use.
@@ -74,6 +77,7 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`transcribe.py <video>`** — single-file Scribe call. `--num-speakers N` optional. Cached.
 - **`transcribe_batch.py <videos_dir>`** — 4-worker parallel transcription. Use for multi-take.
 - **`pack_transcripts.py --edit-dir <dir>`** — `transcripts/*.json` → `takes_packed.md` (phrase-level, break on silence ≥ 0.5s).
+- **`visual_notes.py <videos_dir_or_files>`** — Gemini watches 360p / 1 fps proxies and logs what the picture shows (shot changes, focus/exposure problems, speaker looking away, slides, B-roll-worthy moments) → `visual_notes.md`. `--context "<project in a sentence>"` sharpens it. Cached per source; paid API — run it when picture matters (multi-camera, B-roll, screen content, long unfamiliar footage), skip it for a single clean talking head.
 - **`timeline_view.py <video> <start> <end>`** — filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool** — use it at decision points, not constantly.
 - **`render.py <edl.json> -o <out>`** — per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline.
 - **`grade.py <in> -o <out>`** — ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
@@ -82,7 +86,7 @@ For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a su
 
 ## The process
 
-1. **Inventory.** `ffprobe` every source. `transcribe_batch.py` on the directory. `pack_transcripts.py` to produce `takes_packed.md`. Sample one or two `timeline_view`s for a visual first impression.
+1. **Inventory.** `ffprobe` every source. `transcribe_batch.py` on the directory. `pack_transcripts.py` to produce `takes_packed.md`. Sample one or two `timeline_view`s for a visual first impression. When the picture carries the edit (B-roll, multi-cam, screen recordings, hours of unfamiliar footage), also run `visual_notes.py` and read `visual_notes.md` alongside the transcript.
 2. **Pre-scan for problems.** One pass over `takes_packed.md` to note verbal slips, obvious mis-speaks, or phrasings to avoid. Plain list, feed into the editor brief.
 3. **Converse.** Describe what you see in plain English. Ask questions *shaped by the material*. Collect: content type, target length/aspect, aesthetic/brand direction, pacing feel, must-preserve moments, must-cut moments, animation and grade preferences, subtitle needs. Do not use a fixed checklist — the right questions are different every time.
 4. **Propose strategy.** 4–8 sentences: shape, take choices, cut direction, animation plan, grade direction, subtitle style, length estimate. **Wait for confirmation.**
@@ -124,6 +128,19 @@ Example line:
   [006.08-006.74] S0 We fixed this.
 ```
 
+## Visual notes (optional second reading view)
+
+`visual_notes.py` gives the picture the same treatment `takes_packed.md` gives speech: per take, a one-paragraph summary and plain-prose notes with `[start-end]` ranges. It is deliberately not a tag or score format (see Anti-patterns) — you still judge at decision time.
+
+```
+## C0103  (duration: 43.0s, 4 notes)
+  Medium close-up, home office, soft window light from the left.
+  [012.00-015.00] Speaker glances down at notes on the desk.
+  [027.00-029.00] Focus hunts briefly, face goes soft.
+```
+
+The times come from 1 fps sampling and are good to about ±1s. Use them to find and rule out moments; cut edges still come from the Scribe word boundaries (Hard Rule 6), and anything a cut depends on gets a `timeline_view` check.
+
 ## Editor sub-agent brief (for multi-take selection)
 
 When the task is "pick the best take of each beat across many clips," spawn a dedicated sub-agent with a brief shaped like this. The structure is load-bearing; the pitch-shape example is not.
@@ -134,6 +151,8 @@ assemble them chronologically by beat, not by source clip order.
 
 INPUTS:
   - takes_packed.md (time-annotated phrase-level transcripts of all takes)
+  - visual_notes.md, if it exists (what the picture shows; times ±1s —
+    use it to reject or prefer takes, never for cut edges)
   - Product/narrative context: <2 sentences from the user>
   - Speaker(s): <name, role, delivery style note>
   - Expected structure: <pick an archetype or invent one>
