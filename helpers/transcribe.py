@@ -33,7 +33,7 @@ import requests
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 
 
-def load_api_key() -> str:
+def load_api_key(name: str = "ELEVENLABS_API_KEY") -> str:
     for candidate in [Path(__file__).resolve().parent.parent / ".env", Path(".env")]:
         if candidate.exists():
             for line in candidate.read_text().splitlines():
@@ -41,11 +41,12 @@ def load_api_key() -> str:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 k, v = line.split("=", 1)
-                if k.strip() == "ELEVENLABS_API_KEY":
-                    return v.strip().strip('"').strip("'")
-    v = os.environ.get("ELEVENLABS_API_KEY", "")
+                v = v.strip().strip('"').strip("'")
+                if k.strip() == name and v:
+                    return v
+    v = os.environ.get(name, "")
     if not v:
-        sys.exit("ELEVENLABS_API_KEY not found in .env or environment")
+        sys.exit(f"{name} not found in .env or environment")
     return v
 
 

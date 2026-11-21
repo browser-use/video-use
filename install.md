@@ -109,7 +109,7 @@ Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
     When the user pastes a key, write it to `~/Developer/video-use/.env`:
 
     ```bash
-    printf 'ELEVENLABS_API_KEY=%s\n' "$KEY" > ~/Developer/video-use/.env
+    printf 'ELEVENLABS_API_KEY=%s\n' "$KEY" >> ~/Developer/video-use/.env
     chmod 600 ~/Developer/video-use/.env
     ```
 
@@ -124,6 +124,16 @@ Scribe (ElevenLabs) does all transcription. Without a key, nothing transcribes.
     ```
 
     `200` means the key works. `401` means the user pasted a wrong/expired key — ask once more and stop. Anything else (network, 5xx), move on and verify during first real transcription.
+
+### 5b. Gemini API key (optional)
+
+Only `helpers/visual_notes.py` uses it (Gemini watches the footage and logs what the picture shows). Don't ask for it during install; ask the first time the user wants visual notes. Same rules as above: append `GEMINI_API_KEY=<key>` to `~/Developer/video-use/.env` (or use the exported env var), never echo it. Quota-free check — `200` means it works:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "x-goog-api-key: $(sed -n 's/^GEMINI_API_KEY=//p' ~/Developer/video-use/.env)" \
+  https://generativelanguage.googleapis.com/v1beta/models
+```
 
 ### 6. Verify end-to-end
 

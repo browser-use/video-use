@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Python 3.10 do sistema (sem `uv`, sem venv). Deps: `python -m pip install -e .` (requests, librosa, matplotlib, pillow, numpy).
 - `ffmpeg`/`ffprobe` 6.0 já estão no PATH.
 - **Defina `PYTHONUTF8=1`** ao rodar helpers e testes: eles imprimem `→` e o console cp1252 do Windows lança `UnicodeEncodeError` sem isso.
-- Chave da ElevenLabs em `.env` na raiz do repo (ignorado pelo git). `.env.example` é só o template versionado — nunca coloque a chave nele. `transcribe.load_api_key()` procura `<repo>/.env`, depois `./.env`, depois a variável `ELEVENLABS_API_KEY`.
+- Chaves da ElevenLabs (`ELEVENLABS_API_KEY`) e do Gemini (`GEMINI_API_KEY`) em `.env` na raiz do repo (ignorado pelo git). `.env.example` é só o template versionado — nunca coloque chaves nele. `transcribe.load_api_key(name)` procura `<repo>/.env`, depois `./.env`, depois a variável de ambiente (padrão: `ELEVENLABS_API_KEY`).
 
 ## Comandos
 
@@ -32,7 +32,7 @@ PYTHONUTF8=1 python -m unittest tests.test_render_captions.ChunkWordsTests.test_
 
 Não há linter nem build configurados. Os testes carregam `helpers/render.py` via `importlib` (os helpers não são um pacote importável) e fazem mock de `subprocess`, então não chamam ffmpeg nem a API.
 
-Transcrição (`transcribe.py`, `transcribe_batch.py`) gasta créditos pagos do Scribe — não rode para testar sem o usuário pedir.
+Transcrição (`transcribe.py`, `transcribe_batch.py`) gasta créditos pagos do Scribe, e `visual_notes.py` gasta créditos do Gemini — não rode para testar sem o usuário pedir.
 
 ## Arquitetura
 
@@ -44,6 +44,7 @@ Pipeline: `transcribe` → `pack_transcripts` → LLM decide cortes → `edl.jso
 - `render.py` é o núcleo e codifica as Hard Rules de `SKILL.md`, nesta ordem: extrai cada segmento com grade + fades de áudio de 30 ms → concat sem perdas (`-c copy`) em `base.mp4` → um filtergraph com overlays deslocados por `setpts=PTS-STARTPTS+T/TB` e **legendas por último** → loudnorm em dois passos. Importa `get_preset`/`auto_grade_for_clip` de `grade.py` (mesmo diretório, com fallback se o import falhar). Detecta fonte HDR e retrato (incluindo rotação em side data) e resolve um único fps a partir da primeira fonte, salvo `--fps`. Flags: `--preview`, `--draft`, `--build-subtitles`, `--no-subtitles`, `--no-loudnorm`, `--fps`.
 - O SRT mestre usa tempo da timeline de saída: `word.start - segment_start + segment_offset`. O chunking (`chunk_words`) e o estilo (`SUB_FORCE_STYLE`) ficam em `render.py`.
 - `grade.py`: modo auto por padrão (correção sutil limitada a ±8%, sem look criativo), presets (`warm_cinematic`, `neutral_punch`, `none`) ou `--filter` com cadeia ffmpeg crua.
+- `visual_notes.py` (opcional): gera proxy 360p / 1 fps com ffmpeg, divide em janelas (`--window`, padrão 900 s), sobe cada uma pela Files API do Gemini (REST via `requests`, sem SDK), pede JSON estruturado (resumo + notas `MM:SS` relativas à janela), desloca para o tempo da fonte e cacheia em `edit/visual/<stem>.json`; toda execução reconstrói `edit/visual_notes.md` a partir do cache. Importa `pack_transcripts`, `transcribe` e `transcribe_batch` como módulos irmãos. Tempos valem ±1 s: servem para achar momentos, nunca como borda de corte.
 - `timeline_view.py`: PNG com filmstrip + waveform + palavras + silêncios para um intervalo; é ferramenta de inspeção pontual, não de varredura.
 
 Ao mudar o comportamento de render, mantenha `SKILL.md` coerente com o código: o agente de edição segue o documento, não o código.
