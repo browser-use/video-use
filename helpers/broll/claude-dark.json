@@ -1,0 +1,15 @@
+{
+  "bg": "#1F1E1C",
+  "bg-surface": "#2A2926",
+  "bg-hover": "#33312D",
+  "text": "#E9E6DC",
+  "text-dim": "#9A968C",
+  "text-bright": "#FAF9F5",
+  "accent": "#D97757",
+  "accent-dim": "#B05F43",
+  "blue": "#9CB8D9",
+  "border": "#3A3833",
+  "tool-bg": "#1A1917",
+  "thinking-bg": "#181715",
+  "extraCss": "body{font-family:ui-monospace,Menlo,monospace} .user-text,.assistant-text{font-size:21px!important;line-height:1.55!important}"
+}

@@ -80,6 +80,10 @@ Helpers (`helpers/transcribe.py`, `helpers/render.py`, etc.) live alongside this
 - **`timeline_view.py <video> <start> <end>`** (filmstrip + waveform PNG. On-demand visual drill-down. **Not a scan tool**) use it at decision points, not constantly.
 - **`render.py <edl.json> -o <out>`**: per-segment extract → concat → overlays (PTS-shifted) → subtitles LAST. `--preview` for 720p fast. `--build-subtitles` to generate master.srt inline. `--native` keeps the source resolution (4K stays 4K, VideoToolbox H.264 at 45 Mbps); the default scales to 1080p.
 - **`grade.py <in> -o <out>`**: ffmpeg filter chain grade. Presets + `--filter '<raw>'` for custom.
+- **`broll/`**: the B-roll kit for canvas scene pages that seek to time t. `broll-kit.js` (camera push, padded window frame, line-by-line typing of a capture, cursor, spotlight, highlighter, seeded rough.js sketch strokes), `render.js` (frames to mp4, or stills), `texts.js` (what each frame draws, for the lint), `capture.js` (a claude-replay page to a 2x still plus line boxes). Usage in `references/broll-style.md`.
+- **`session_capture.py <spec.json> <out_dir>`**: a real Claude Code session cut to allowlisted verbatim excerpts, privacy-scanned, rendered offline with claude-replay (MIT, pinned), captured at 2x.
+- **`session_scan.py <files>`**: the privacy scan on its own (emails, paths, private links, phones, patient identifiers, keys, a private denylist of client names).
+- **`broll_lint.py <texts.json>`**: rules B1 to B5 from the feedback ledger.
 
 For animations, create `<edit>/animations/slot_<id>/` with `Bash` and spawn a sub-agent via the `Agent` tool.
 
@@ -218,7 +222,11 @@ Invent a third style if neither fits. Hard rules: subtitles LAST (Rule 1), outpu
 
 ## Animations (when requested)
 
-Animations match the content and the brand. **Get the palette, font, and visual language from the conversation**: never assume a default. If the user hasn't told you, propose a palette in the strategy phase and wait for confirmation before building anything.
+Animations match the content and the brand. **For Serious AI podcast B-roll, read `references/broll-style.md` first**: the house style, the teardown it comes from, the shared kit in `helpers/broll/`, session capture, and the feedback ledger. For any other brand, take the palette and type from the conversation, or propose one in the strategy phase and wait for confirmation.
+
+**Before a B-roll track renders**, run `node helpers/broll/texts.js scenes.html texts.json` and `python3 helpers/broll_lint.py texts.json --transcript <transcript.json> --page scenes.html`, and fix every hit. Each rule (B1 to B5) is a piece of past feedback that a check now holds.
+
+**Real work on screen** (a Claude Code session Chris mentions on air) comes from `helpers/session_capture.py`, never from a screen recording: it keeps only allowlisted, verbatim excerpts and stops on any privacy hit. No PHI or client data reaches a frame.
 
 **Tool options:**
 
@@ -257,16 +265,6 @@ def ease_in_out_cubic(t):
 `ease_out_cubic` for single reveals (slow landing). `ease_in_out_cubic` for continuous draws.
 
 **Typing text anchor trick:** center on the FULL string's width, not the partial-string width, otherwise text slides left during reveal.
-
-**Example palette** (the launch video, one aesthetic among infinite):
-- Background `(10, 10, 10)` near-black
-- Accent `#FF5A00` / `(255, 90, 0)` orange
-- Labels `(110, 110, 110)` dim gray
-- Font: Menlo Bold at `/System/Library/Fonts/Menlo.ttc` (index 1)
-- ≤ 2 accent colors, ~40% empty space, minimal chrome
-- Result: terminal / retro tech feel
-
-This is one style. If the brand is warm and serif, use that. If it's colorful and playful, use that. If the user handed you a style guide, follow it. If they didn't, propose one and confirm.
 
 **Parallel sub-agent brief**: each animation is one sub-agent spawned via the `Agent` tool. Each prompt is self-contained (sub-agents have no parent context). Include:
 

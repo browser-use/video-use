@@ -1,6 +1,6 @@
 {
   "name": "serious-ai-video-edit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Edit any video by conversation: transcribe, cut, color grade, overlay animations, burn subtitles. Forked from browser-use/video-use with local Whisper transcription.",
   "author": {"name": "Chris Duff", "url": "https://seriousai.partners"},
   "repository": "https://github.com/serious-ai/serious-ai-video-edit",
